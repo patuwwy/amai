@@ -23,6 +23,7 @@ function parseArgs() {
         port: null,
         model: null,
         auto: false,
+        approvalMode: null,
         configFile: null,
         query: []
     };
@@ -36,8 +37,10 @@ function parseArgs() {
             options.port = parseInt(args[++i], 10);
         } else if (arg === '-m' || arg === '--model') {
             options.model = args[++i];
+        } else if (arg === '-s' || arg === '--mode') {
+            options.approvalMode = (args[++i] || "").toLowerCase();
         } else if (arg === '-a' || arg === '--auto') {
-            options.auto = true;
+            options.approvalMode = 'auto';
         } else if (arg === '-d' || arg === '--debug') {
             options.debug = true;
         } else if (arg === '-c' || arg === '--config') {
@@ -52,7 +55,9 @@ function parseArgs() {
             console.log("  -h, --host <ip>       Bridge server IP (default: 127.0.0.1)");
             console.log("  -p, --port <num>      Bridge server port (default: 11435)");
             console.log("  -m, --model <name>    Model name in Ollama (default: qwen3.8:latest)");
-            console.log("  -a, --auto            Auto-execute AI tool calls without asking");
+            console.log("  -s, --mode <mode>     Approval mode: smart (default), manual, auto");
+            console.log("  -a, --auto            Shortcut for '--mode auto' (unrestricted execution)");
+            console.log("  -d, --debug           Enable verbose debug logging");
             console.log("  -c, --config <file>   Path to JSON configuration file");
             console.log("  -v, --version         Show version");
             process.exit(0);
@@ -72,7 +77,7 @@ function main() {
     if (opts.host) cfg.host = opts.host;
     if (opts.port) cfg.port = opts.port;
     if (opts.model) cfg.model = opts.model;
-    if (opts.auto) cfg.autoExecute = true;
+    if (opts.approvalMode) cfg.approvalMode = opts.approvalMode;
     if (opts.debug) cfg.debug = true;
 
     // One-shot query mode

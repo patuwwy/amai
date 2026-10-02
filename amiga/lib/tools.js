@@ -176,11 +176,96 @@ function executeTool(name, args) {
     }
 }
 
+/**
+ * Assesses whether a tool call is dangerous.
+ * Safe tools (read_file, list_dir, get_cwd, safe CLI commands) return { dangerous: false }
+ * Dangerous tools (write_file, patch_file, destructive commands) return { dangerous: true, reason: "..." }
+ */
+function assessRisk(name, args) {
+    if (typeof args === 'string') {
+        try { args = JSON.parse(args); } catch (e) {}
+    }
+
+    if (name === 'get_cwd') {
+        return { dangerous: false, reason: "Read-only: queries current directory" };
+    }
+
+    if (name === 'read_file') {
+        return { dangerous: false, reason: "Read-only: inspects " + (args ? args.path : "file") };
+    }
+
+    if (name === 'list_dir') {
+        return { dangerous: false, reason: "Read-only: lists directory " + (args ? args.path : "") };
+    }
+
+    if (name === 'write_file') {
+        var path = (args && args.path) ? args.path : "file";
+        var isSystem = path.toUpperCase().indexOf("SYS:") === 0 ||
+                       path.toUpperCase().indexOf("S:") === 0 ||
+                       path.toUpperCase().indexOf("DEVS:") === 0 ||
+                       path.toUpperCase().indexOf("C:") === 0;
+        return {
+            dangerous: true,
+            riskLevel: isSystem ? "CRITICAL" : "MEDIUM",
+            reason: isSystem ? "Modifies SYSTEM directory: " + path : "Creates/overwrites file: " + path
+        };
+    }
+
+    if (name === 'patch_file') {
+        var pPath = (args && args.path) ? args.path : "file";
+        return {
+            dangerous: true,
+            riskLevel: "MEDIUM",
+            reason: "Modifies existing file: " + pPath
+        };
+    }
+
+    if (name === 'run_command') {
+        var cmd = (args && args.command) ? args.command.trim() : "";
+        var cmdLower = cmd.toLowerCase();
+
+        // Safe read-only commands
+        var safeCmds = ['cd', 'dir', 'list', 'avail', 'version', 'status', 'date', 'type', 'echo', 'info', 'which'];
+        for (var i = 0; i < safeCmds.length; i++) {
+            var sc = safeCmds[i];
+            if (cmdLower === sc || cmdLower.indexOf(sc + ' ') === 0 || cmdLower.indexOf(sc + '/') === 0) {
+                if (cmdLower.indexOf('delete') === -1 && cmdLower.indexOf('format') === -1 && cmd.indexOf('>') === -1) {
+                    return { dangerous: false, reason: "Read-only command: " + sc };
+                }
+            }
+        }
+
+        var isCritical = cmdLower.indexOf('format') !== -1 ||
+                         cmdLower.indexOf('reboot') !== -1 ||
+                         cmdLower.indexOf('coldreboot') !== -1 ||
+                         cmdLower.indexOf('install') !== -1;
+
+        var isDestructive = cmdLower.indexOf('delete') !== -1 ||
+                            cmdLower.indexOf('relabel') !== -1 ||
+                            cmdLower.indexOf('copy') !== -1 ||
+                            cmdLower.indexOf('rename') !== -1 ||
+                            cmdLower.indexOf('protect') !== -1;
+
+        var riskLevel = isCritical ? "CRITICAL" : (isDestructive ? "HIGH" : "MEDIUM");
+        var reason = isCritical ? "Critical system command: " + cmd :
+                     (isDestructive ? "Destructive/file modification command: " + cmd : "Executes shell command: " + cmd);
+
+        return {
+            dangerous: true,
+            riskLevel: riskLevel,
+            reason: reason
+        };
+    }
+
+    return { dangerous: true, riskLevel: "HIGH", reason: "Unknown tool: " + name };
+}
+
 module.exports = {
     readFile: readFile,
     writeFile: writeFile,
     patchFile: patchFile,
     listDir: listDir,
     runCommand: runCommand,
-    executeTool: executeTool
+    executeTool: executeTool,
+    assessRisk: assessRisk
 };

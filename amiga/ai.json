@@ -2,7 +2,7 @@
   "host": "127.0.0.1",
   "port": 11435,
   "model": "qwen3.8:latest",
-  "autoExecute": false,
+  "approvalMode": "smart",
   "debug": false,
   "encoding": "ascii",
   "timeout": 60000

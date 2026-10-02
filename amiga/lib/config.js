@@ -10,7 +10,8 @@ var defaultConfig = {
     host: "127.0.0.1",
     port: 11435,
     model: "qwen3.8:latest",
-    autoExecute: false,
+    approvalMode: "smart", // 'smart' (auto-approve safe reads, prompt on dangerous writes/commands), 'manual' (prompt for all), 'auto' (unrestricted)
+    autoExecute: false,    // legacy alias for approvalMode: "auto"
     debug: false,
     encoding: "ascii", // 'ascii' (safest for standard Topaz font), 'amigapl', 'iso-8859-2'
     timeout: 60000, // 60s socket timeout
@@ -51,6 +52,18 @@ function loadConfig(customFile) {
                 // Ignore parse errors on secondary configs
             }
         }
+    }
+
+    // Normalize approvalMode & autoExecute
+    if (cfg.autoExecute === true && (!cfg.approvalMode || cfg.approvalMode === 'manual')) {
+        cfg.approvalMode = 'auto';
+    }
+    if (!cfg.approvalMode) {
+        cfg.approvalMode = 'smart';
+    }
+    cfg.approvalMode = String(cfg.approvalMode).toLowerCase();
+    if (cfg.approvalMode !== 'smart' && cfg.approvalMode !== 'manual' && cfg.approvalMode !== 'auto') {
+        cfg.approvalMode = 'smart';
     }
 
     return cfg;

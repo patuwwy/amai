@@ -22,6 +22,14 @@ function startRepl(cfg) {
     if (initialCwd) {
         console.log(" Dir:     " + ansi.info(initialCwd));
     }
+    var curMode = (cfg.approvalMode || 'smart').toLowerCase();
+    var modeBadge = ansi.success("SMART (prompts on dangerous actions)");
+    if (curMode === 'auto') {
+        modeBadge = ansi.warn("AUTO (unrestricted, executes all tools)");
+    } else if (curMode === 'manual') {
+        modeBadge = ansi.dim("MANUAL (prompts on every tool)");
+    }
+    console.log(" Safety:  " + modeBadge);
     if (cfg.debug) {
         console.log(" Debug:   " + ansi.warn("ENABLED (verbose logging)"));
     }
@@ -127,22 +135,54 @@ function startRepl(cfg) {
                     processNextTool();
                 }
 
-                if (cfg.autoExecute) {
+                function rejectAndContinue(reason) {
+                    console.log(ansi.warn("[Tool cancelled by user]"));
+                    messages.push({
+                        role: 'tool',
+                        tool_call_id: tc.id || ("call_" + callIdx),
+                        content: JSON.stringify({ success: false, error: "Tool execution denied by user (" + (reason || "rejected") + ")." })
+                    });
+                    callIdx++;
+                    processNextTool();
+                }
+
+                var risk = tools.assessRisk(toolName, toolArgs);
+                var mode = (cfg.approvalMode || 'smart').toLowerCase();
+
+                if (mode === 'auto') {
+                    console.log(ansi.dim("[Auto-approved: AUTO mode active]"));
                     executeAndContinue();
-                } else {
-                    rl.question(ansi.bold("Execute this tool? [Y/n]: "), function(answer) {
+                } else if (mode === 'smart') {
+                    if (!risk.dangerous) {
+                        console.log(ansi.success("[Smart-Approved: Safe read-only] ") + ansi.dim(risk.reason));
+                        executeAndContinue();
+                    } else {
+                        var badgeColor = risk.riskLevel === 'CRITICAL' ? ansi.ANSI.red :
+                                        (risk.riskLevel === 'HIGH' ? ansi.ANSI.yellow : ansi.ANSI.magenta);
+                        console.log(ansi.bold(ansi.c(badgeColor, "[SECURITY ALERT - " + (risk.riskLevel || "MEDIUM") + " RISK] ")) + risk.reason);
+                        rl.question(ansi.bold("Execute dangerous tool? [y/N]: "), function(answer) {
+                            var a = answer ? answer.trim().toLowerCase() : "";
+                            if (a === "y" || a === "yes") {
+                                executeAndContinue();
+                            } else {
+                                rejectAndContinue(risk.reason);
+                            }
+                        });
+                    }
+                } else { // 'manual' mode
+                    if (risk.dangerous) {
+                        var badgeColor = risk.riskLevel === 'CRITICAL' ? ansi.ANSI.red :
+                                        (risk.riskLevel === 'HIGH' ? ansi.ANSI.yellow : ansi.ANSI.magenta);
+                        console.log(ansi.bold(ansi.c(badgeColor, "[Risk: " + (risk.riskLevel || "MEDIUM") + "] ")) + risk.reason);
+                    } else {
+                        console.log(ansi.dim("[Safe action: " + risk.reason + "]"));
+                    }
+                    rl.question(ansi.bold("Execute tool " + toolName + "? [Y/n]: "), function(answer) {
                         var a = answer ? answer.trim().toLowerCase() : "";
                         if (a === "" || a === "y" || a === "yes") {
                             executeAndContinue();
                         } else {
-                            console.log(ansi.warn("[Tool cancelled by user]"));
-                            messages.push({
-                                role: 'tool',
-                                tool_call_id: tc.id || ("call_" + callIdx),
-                                content: JSON.stringify({ success: false, error: "Tool execution denied by user." })
-                            });
-                            callIdx++;
-                            processNextTool();
+                            rejectAndContinue("rejected in manual mode");
                         }
                     });
                 }
@@ -179,13 +219,14 @@ function startRepl(cfg) {
                     console.log(ansi.bold("\nAvailable Commands:"));
                     console.log("  " + ansi.info("/help") + "             - Show this help screen");
                     console.log("  " + ansi.info("/status") + "          - Check connection to PC bridge and Ollama");
+                    console.log("  " + ansi.info("/mode [mode]") + "     - Set approval mode: smart (default), manual, auto");
                     console.log("  " + ansi.info("/cd [dir]") + "        - Print or inspect current working directory");
                     console.log("  " + ansi.info("/host <ip>") + "       - Change bridge host IP (e.g. /host 192.168.1.16)");
                     console.log("  " + ansi.info("/read <file>") + "     - Read Amiga file into AI context (e.g. /read RAM:main.c)");
                     console.log("  " + ansi.info("/run <cmd>") + "       - Run AmigaDOS command directly (e.g. /run dir RAM:)");
                     console.log("  " + ansi.info("/model [name]") + "    - Show or switch active model (e.g. /model qwen3.8:latest)");
                     console.log("  " + ansi.info("/encoding [mode]") + " - Set charset: ascii, amigapl, iso-8859-2, raw");
-                    console.log("  " + ansi.info("/auto [on|off]") + "   - Toggle auto-execution of AI tools without prompt");
+                    console.log("  " + ansi.info("/auto [on|off]") + "   - Quick toggle: AUTO mode vs SMART mode");
                     console.log("  " + ansi.info("/debug [on|off]") + "  - Toggle verbose debug logging");
                     console.log("  " + ansi.info("/clear") + "           - Clear conversation context");
                     console.log("  " + ansi.info("/exit") + "            - Exit Amiga AI Shell\n");
@@ -200,15 +241,43 @@ function startRepl(cfg) {
                     return;
                 }
 
+                if (cmd === '/mode') {
+                    if (arg) {
+                        var m = arg.toLowerCase();
+                        if (m === 'smart' || m === 'manual' || m === 'auto') {
+                            cfg.approvalMode = m;
+                            console.log(ansi.success("Safety approval mode switched to: ") + ansi.bold(m.toUpperCase()));
+                            if (m === 'smart') {
+                                console.log(ansi.dim("Safe read-only actions run automatically; dangerous actions ask for confirmation.\n"));
+                            } else if (m === 'manual') {
+                                console.log(ansi.dim("Every tool execution will prompt for confirmation [Y/n].\n"));
+                            } else if (m === 'auto') {
+                                console.log(ansi.warn("Unrestricted mode: all tool calls execute immediately without prompt!\n"));
+                            }
+                        } else {
+                            console.log(ansi.warn("Unknown mode '" + arg + "'. Choose: smart, manual, auto\n"));
+                        }
+                    } else {
+                        console.log("Current approval mode: " + ansi.bold((cfg.approvalMode || 'smart').toUpperCase()));
+                        console.log("Modes:");
+                        console.log("  " + ansi.info("smart") + "  - Auto-executes safe reads (read_file, list_dir, cd), confirms dangerous actions");
+                        console.log("  " + ansi.info("manual") + " - Asks confirmation [Y/n] for every single tool call");
+                        console.log("  " + ansi.info("auto") + "   - Free mode: executes all tools without confirmation (use with caution!)");
+                        console.log("Usage: /mode <smart|manual|auto>\n");
+                    }
+                    promptLoop();
+                    return;
+                }
+
                 if (cmd === '/auto') {
                     if (arg === 'on') {
-                        cfg.autoExecute = true;
+                        cfg.approvalMode = 'auto';
                     } else if (arg === 'off') {
-                        cfg.autoExecute = false;
+                        cfg.approvalMode = 'smart';
                     } else {
-                        cfg.autoExecute = !cfg.autoExecute;
+                        cfg.approvalMode = (cfg.approvalMode === 'auto') ? 'smart' : 'auto';
                     }
-                    console.log("Auto-execute tools: " + (cfg.autoExecute ? ansi.success("ENABLED") : ansi.warn("DISABLED")) + "\n");
+                    console.log("Approval mode: " + (cfg.approvalMode === 'auto' ? ansi.warn("AUTO (unrestricted)") : ansi.success(cfg.approvalMode.toUpperCase())) + "\n");
                     promptLoop();
                     return;
                 }
