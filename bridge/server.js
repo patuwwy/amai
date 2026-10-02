@@ -1,7 +1,7 @@
 /**
  * Amiga AI Bridge - PC Node.js Server
  * Bridges Amiga (NodeAmiga) to local Ollama instance (localhost:11434).
- * Supports streaming, heartbeat keepalive, and Amiga-optimized tool definitions.
+ * Supports streaming, heartbeat keepalive, charset transliteration (ASCII / AmigaPL / ISO-8859-2), and Amiga tools.
  */
 
 const http = require('http');
@@ -10,6 +10,91 @@ const PORT = process.env.BRIDGE_PORT || 11435;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
 const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'qwen3.8:latest';
+
+// Character maps for Amiga console transliteration
+const POLISH_ASCII_MAP = {
+    'ą': 'a', 'Ą': 'A',
+    'ć': 'c', 'Ć': 'C',
+    'ę': 'e', 'Ę': 'E',
+    'ł': 'l', 'Ł': 'L',
+    'ń': 'n', 'Ń': 'N',
+    'ó': 'o', 'Ó': 'O',
+    'ś': 's', 'Ś': 'S',
+    'ź': 'z', 'Ź': 'Z',
+    'ż': 'z', 'Ż': 'Z'
+};
+
+const POLISH_ISO_8859_2 = {
+    'ą': '\xb1', 'Ą': '\xa1',
+    'ć': '\xe6', 'Ć': '\xc6',
+    'ę': '\xea', 'Ę': '\xca',
+    'ł': '\xb3', 'Ł': '\xa3',
+    'ń': '\xf1', 'Ń': '\xd1',
+    'ó': '\xf3', 'Ó': '\xd3',
+    'ś': '\xb6', 'Ś': '\xa6',
+    'ź': '\xbc', 'Ź': '\xac',
+    'ż': '\xbf', 'Ż': '\xaf'
+};
+
+const POLISH_AMIGA_PL = {
+    'ą': '\xe1', 'Ą': '\xc1',
+    'ć': '\xe2', 'Ć': '\xc2',
+    'ę': '\xe5', 'Ę': '\xc5',
+    'ł': '\xe7', 'Ł': '\xc7',
+    'ń': '\xe9', 'Ń': '\xc9',
+    'ó': '\xf3', 'Ó': '\xd3',
+    'ś': '\xeb', 'Ś': '\xcb',
+    'ź': '\xec', 'Ź': '\xcc',
+    'ż': '\xed', 'Ż': '\xcd'
+};
+
+const UNICODE_ASCII_MAP = {
+    '—': ' - ',
+    '–': '-',
+    '…': '...',
+    '“': '"',
+    '”': '"',
+    '„': '"',
+    '’': "'",
+    '‘': "'",
+    '«': '<<',
+    '»': '>>',
+    '•': '*',
+    '→': '->',
+    '←': '<-',
+    '✓': '[OK]',
+    '✔': '[OK]',
+    '✗': '[X]',
+    '✘': '[X]'
+};
+
+/**
+ * Sanitizes and encodes text for the Amiga console according to selected encoding.
+ * Modes: 'ascii' (default, safe for Topaz font), 'iso-8859-2', 'amigapl', 'raw'
+ */
+function sanitizeForAmiga(str, encoding = 'ascii') {
+    if (!str) return str;
+
+    // First replace typography
+    str = str.replace(/[—–…“”„’‘«»•→←✓✔✗✘]/g, ch => UNICODE_ASCII_MAP[ch] || ch);
+
+    // Strip emojis and high Unicode code points (> 0xFFFF)
+    str = str.replace(/[\u{1F000}-\u{1FFFF}]/gu, '');
+    str = str.replace(/[\u{2600}-\u{27BF}]/gu, '');
+    str = str.replace(/[\u{FE00}-\u{FE0F}]/gu, ''); // variation selectors
+
+    if (encoding === 'ascii') {
+        str = str.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, ch => POLISH_ASCII_MAP[ch] || ch);
+        // Also strip any remaining non-ASCII characters (> 127) to avoid console glitches
+        str = str.replace(/[^\x00-\x7F\n\r\t]/g, '');
+    } else if (encoding === 'iso-8859-2' || encoding === 'latin2') {
+        str = str.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, ch => POLISH_ISO_8859_2[ch] || ch);
+    } else if (encoding === 'amigapl') {
+        str = str.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, ch => POLISH_AMIGA_PL[ch] || ch);
+    }
+
+    return str;
+}
 
 // Tools available to the AI on the Amiga
 const AMIGA_TOOLS = [
@@ -120,7 +205,8 @@ Rules:
 2. When creating or editing files, prefer writing clean, standards-compliant code with proper AmigaOS headers (#include <proto/dos.h>, <proto/intuition.h>, etc.).
 3. When using tools, invoke read_file first if you need to inspect existing code, then use write_file or patch_file to apply fixes.
 4. Keep explanations concise as screen space in Amiga Shell / CLI is limited (standard 640x256 or 640x512 PAL/NTSC).
-5. File paths on Amiga use device names followed by colons, e.g. "RAM:main.c", "SYS:S/startup-sequence", "DH0:projects/code.c". Use "/" as directory separator (e.g. "DH0:src/main.c").`;
+5. File paths on Amiga use device names followed by colons, e.g. "RAM:main.c", "SYS:S/startup-sequence", "DH0:projects/code.c". Use "/" as directory separator (e.g. "DH0:src/main.c").
+6. Output in plain ASCII text suitable for standard classic Amiga Topaz console. Do NOT use emojis, special unicode bullets, or fancy quotes.`;
 
 // Helper: Fetch available models from Ollama
 async function getOllamaModels() {
@@ -190,15 +276,16 @@ const server = http.createServer(async (req, res) => {
             const model = requestData.model || DEFAULT_MODEL;
             const messages = requestData.messages || [];
             const enableTools = requestData.enable_tools !== false;
+            const encoding = requestData.encoding || 'ascii'; // 'ascii', 'amigapl', 'iso-8859-2', 'raw'
 
             if (!messages.some(m => m.role === 'system')) {
                 messages.unshift({ role: 'system', content: SYSTEM_PROMPT });
             }
 
-            console.log(`[Bridge] Prompting model: ${model}, messages: ${messages.length}, tools: ${enableTools}`);
+            console.log(`[Bridge] Prompting model: ${model}, messages: ${messages.length}, encoding: ${encoding}, tools: ${enableTools}`);
 
             res.writeHead(200, {
-                'Content-Type': 'application/x-ndjson; charset=utf-8',
+                'Content-Type': 'application/x-ndjson; charset=latin1',
                 'Transfer-Encoding': 'chunked',
                 'Cache-Control': 'no-cache',
                 'Connection': 'close'
@@ -268,9 +355,11 @@ const server = http.createServer(async (req, res) => {
                             const msg = chunk.message;
                             if (msg) {
                                 if (msg.content) {
+                                    // Sanitize token for Amiga display
+                                    const sanitizedToken = sanitizeForAmiga(msg.content, encoding);
                                     sendEvent({
                                         event: 'token',
-                                        text: msg.content
+                                        text: sanitizedToken
                                     });
                                 }
 

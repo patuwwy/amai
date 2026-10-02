@@ -12,6 +12,7 @@ var defaultConfig = {
     model: "qwen3.8:latest",
     autoExecute: false,
     debug: false,
+    encoding: "ascii", // 'ascii' (safest for standard Topaz font), 'amigapl', 'iso-8859-2'
     timeout: 60000, // 60s socket timeout
     systemPrompt: null
 };

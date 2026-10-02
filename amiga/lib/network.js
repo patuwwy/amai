@@ -94,7 +94,8 @@ function sendChat(cfg, messages, callbacks) {
     var payload = JSON.stringify({
         model: cfg.model,
         messages: messages,
-        enable_tools: true
+        enable_tools: true,
+        encoding: cfg.encoding || 'ascii'
     });
 
     var req = "POST /api/chat HTTP/1.0\r\n" +

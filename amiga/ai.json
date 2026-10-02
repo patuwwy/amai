@@ -4,5 +4,6 @@
   "model": "qwen3.8:latest",
   "autoExecute": false,
   "debug": false,
+  "encoding": "ascii",
   "timeout": 60000
 }

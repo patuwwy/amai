@@ -178,6 +178,7 @@ function startRepl(cfg) {
                     console.log("  " + ansi.info("/read <file>") + "     - Read Amiga file into AI context (e.g. /read RAM:main.c)");
                     console.log("  " + ansi.info("/run <cmd>") + "       - Run AmigaDOS command directly (e.g. /run dir RAM:)");
                     console.log("  " + ansi.info("/model [name]") + "    - Show or switch active model (e.g. /model qwen3.8:latest)");
+                    console.log("  " + ansi.info("/encoding [mode]") + " - Set charset: ascii, amigapl, iso-8859-2, raw");
                     console.log("  " + ansi.info("/auto [on|off]") + "   - Toggle auto-execution of AI tools without prompt");
                     console.log("  " + ansi.info("/debug [on|off]") + "  - Toggle verbose debug logging");
                     console.log("  " + ansi.info("/clear") + "           - Clear conversation context");
@@ -225,6 +226,24 @@ function startRepl(cfg) {
                         console.log(ansi.success("Switched host to: " + cfg.host + "\n"));
                     } else {
                         console.log("Current host: " + ansi.info(cfg.host) + "\n");
+                    }
+                    promptLoop();
+                    return;
+                }
+
+                if (cmd === '/encoding') {
+                    if (arg) {
+                        var enc = arg.toLowerCase();
+                        if (enc === 'ascii' || enc === 'amigapl' || enc === 'iso-8859-2' || enc === 'raw') {
+                            cfg.encoding = enc;
+                            console.log(ansi.success("Switched text encoding to: " + cfg.encoding + "\n"));
+                        } else {
+                            console.log(ansi.warn("Unknown encoding. Choose: ascii, amigapl, iso-8859-2, raw\n"));
+                        }
+                    } else {
+                        console.log("Current encoding: " + ansi.info(cfg.encoding || 'ascii'));
+                        console.log("Options: ascii (default, Topaz safe), amigapl (Polish fonts), iso-8859-2, raw");
+                        console.log("Usage: /encoding <ascii|amigapl|iso-8859-2|raw>\n");
                     }
                     promptLoop();
                     return;
