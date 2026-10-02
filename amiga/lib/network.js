@@ -91,11 +91,15 @@ function sendChat(cfg, messages, callbacks) {
 
     debugLog(cfg, "Socket connected successfully. Preparing HTTP POST payload...");
 
+    var currentDir = "";
+    try { if (typeof process.cwd === 'function') currentDir = process.cwd(); } catch(e) {}
+
     var payload = JSON.stringify({
         model: cfg.model,
         messages: messages,
         enable_tools: true,
-        encoding: cfg.encoding || 'ascii'
+        encoding: cfg.encoding || 'ascii',
+        cwd: currentDir
     });
 
     var req = "POST /api/chat HTTP/1.0\r\n" +

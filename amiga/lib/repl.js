@@ -13,14 +13,19 @@ function startRepl(cfg) {
     var maxAgentRounds = 5;
 
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
-    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "             Amiga AI Shell (v1.0)                      ")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " Amiga AI Shell (v1.0) by Patu^Xenium      ")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
     console.log(" Model:   " + ansi.info(cfg.model));
     console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port));
+    var initialCwd = "";
+    try { if (typeof process.cwd === 'function') initialCwd = process.cwd(); } catch(e) {}
+    if (initialCwd) {
+        console.log(" Dir:     " + ansi.info(initialCwd));
+    }
     if (cfg.debug) {
         console.log(" Debug:   " + ansi.warn("ENABLED (verbose logging)"));
     }
-    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/debug") + ", " + ansi.warn("/exit"));
+    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/cd") + ", " + ansi.warn("/exit"));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "--------------------------------------------------------\n")));
 
     var rl = readline.createInterface({ prompt: 'amiga-ai> ' });
@@ -174,6 +179,7 @@ function startRepl(cfg) {
                     console.log(ansi.bold("\nAvailable Commands:"));
                     console.log("  " + ansi.info("/help") + "             - Show this help screen");
                     console.log("  " + ansi.info("/status") + "          - Check connection to PC bridge and Ollama");
+                    console.log("  " + ansi.info("/cd [dir]") + "        - Print or inspect current working directory");
                     console.log("  " + ansi.info("/host <ip>") + "       - Change bridge host IP (e.g. /host 192.168.1.16)");
                     console.log("  " + ansi.info("/read <file>") + "     - Read Amiga file into AI context (e.g. /read RAM:main.c)");
                     console.log("  " + ansi.info("/run <cmd>") + "       - Run AmigaDOS command directly (e.g. /run dir RAM:)");
@@ -203,6 +209,19 @@ function startRepl(cfg) {
                         cfg.autoExecute = !cfg.autoExecute;
                     }
                     console.log("Auto-execute tools: " + (cfg.autoExecute ? ansi.success("ENABLED") : ansi.warn("DISABLED")) + "\n");
+                    promptLoop();
+                    return;
+                }
+
+                if (cmd === '/cd') {
+                    var currentDir = "";
+                    try { currentDir = process.cwd(); } catch(e) {}
+                    if (arg) {
+                        console.log(ansi.info("Current directory: " + currentDir));
+                        console.log(ansi.dim("Tip: AmigaDOS executes tools relative to " + currentDir + ". To run command in another dir: /run cd " + arg));
+                    } else {
+                        console.log("Current working directory on Amiga: " + ansi.info(currentDir) + "\n");
+                    }
                     promptLoop();
                     return;
                 }

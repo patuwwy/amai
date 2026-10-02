@@ -70,7 +70,9 @@ function patchFile(path, search, replace) {
 }
 
 function listDir(path) {
-    if (!path) path = "";
+    if (!path || path === "." || path === "./") {
+        try { path = process.cwd(); } catch(e) { path = ""; }
+    }
     try {
         var entries = fs.readdirSync(path);
         return {
@@ -84,7 +86,30 @@ function listDir(path) {
     }
 }
 
+function getCwd() {
+    var dir = "";
+    try { dir = process.cwd(); } catch(e) {}
+    return {
+        success: true,
+        cwd: dir,
+        message: "Current working directory on Amiga is: " + dir
+    };
+}
+
 function runCommand(command) {
+    var trimmedCmd = command ? command.trim() : "";
+
+    // AmigaDOS 'cd' command without arguments prints current directory
+    if (trimmedCmd.toLowerCase() === "cd") {
+        var dirNow = "";
+        try { dirNow = process.cwd(); } catch(e) {}
+        return {
+            success: true,
+            command: command,
+            output: dirNow + "\n"
+        };
+    }
+
     var tmpOut = "T:ai_cmd_out.tmp";
     // Redirect stdout to temp file in T: (standard Amiga RAM temp directory)
     var cmdWithRedirect = command + " >" + tmpOut;
@@ -134,7 +159,9 @@ function executeTool(name, args) {
         }
     }
 
-    if (name === 'read_file') {
+    if (name === 'get_cwd') {
+        return getCwd();
+    } else if (name === 'read_file') {
         return readFile(args.path);
     } else if (name === 'write_file') {
         return writeFile(args.path, args.content);

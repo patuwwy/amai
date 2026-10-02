@@ -181,8 +181,19 @@ const AMIGA_TOOLS = [
     {
         type: 'function',
         function: {
+            name: 'get_cwd',
+            description: 'Get the current working directory path on Amiga (equivalent to running "cd" without arguments in AmigaDOS)',
+            parameters: {
+                type: 'object',
+                properties: {}
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'run_command',
-            description: 'Execute an AmigaDOS command in shell (e.g. "vc -c test.c", "execute script", "dir")',
+            description: 'Execute an AmigaDOS command in shell (e.g. "cd", "dir", "list", "vc -c test.c")',
             parameters: {
                 type: 'object',
                 properties: {
@@ -197,16 +208,26 @@ const AMIGA_TOOLS = [
     }
 ];
 
-const SYSTEM_PROMPT = `You are Amiga AI, an intelligent coding assistant running on Commodore Amiga via NodeAmiga.
+function getSystemPrompt(cwd) {
+    const cwdLine = cwd ? `Current working directory on Amiga: "${cwd}".` : '';
+    return `You are Amiga AI, an intelligent coding assistant running on Commodore Amiga via NodeAmiga.
 You help the user program in C (SAS/C, VBCC, GCC), m68k Assembler, ARexx, Amiga E, or shell scripts.
-You have tools to read files, write files, patch files, list directories, and execute AmigaDOS commands.
+You have tools to get the current working directory (get_cwd), read files, write files, patch files, list directories, and execute AmigaDOS commands.
+${cwdLine}
 Rules:
 1. Keep Amiga architecture in mind (Motorola 680x0 CPU, Big-Endian, AmigaOS Exec/Intuition/Graphics/DOS libraries).
 2. When creating or editing files, prefer writing clean, standards-compliant code with proper AmigaOS headers (#include <proto/dos.h>, <proto/intuition.h>, etc.).
-3. When using tools, invoke read_file first if you need to inspect existing code, then use write_file or patch_file to apply fixes.
-4. Keep explanations concise as screen space in Amiga Shell / CLI is limited (standard 640x256 or 640x512 PAL/NTSC).
-5. File paths on Amiga use device names followed by colons, e.g. "RAM:main.c", "SYS:S/startup-sequence", "DH0:projects/code.c". Use "/" as directory separator (e.g. "DH0:src/main.c").
+3. In AmigaDOS:
+   - The command "cd" without arguments displays the current working directory.
+   - To check or verify the current directory, use tool get_cwd or run_command("cd").
+   - File paths use device or volume names followed by a colon, e.g. "RAM:main.c", "DEV:amiga", "DH0:projects/code.c".
+   - "/" represents the parent directory (e.g. "cd /" moves one level up, "cd //" moves two levels up).
+   - The "dir" or "list" commands show directory contents.
+   - To inspect the current directory contents, invoke tool list_dir("") or run_command("dir").
+4. When using tools, invoke read_file first if you need to inspect existing code, then use write_file or patch_file to apply fixes.
+5. Keep explanations concise as screen space in Amiga Shell / CLI is limited (standard 640x256 or 640x512 PAL/NTSC).
 6. Output in plain ASCII text suitable for standard classic Amiga Topaz console. Do NOT use emojis, special unicode bullets, or fancy quotes.`;
+}
 
 // Helper: Fetch available models from Ollama
 async function getOllamaModels() {
@@ -276,13 +297,14 @@ const server = http.createServer(async (req, res) => {
             const model = requestData.model || DEFAULT_MODEL;
             const messages = requestData.messages || [];
             const enableTools = requestData.enable_tools !== false;
-            const encoding = requestData.encoding || 'ascii'; // 'ascii', 'amigapl', 'iso-8859-2', 'raw'
+            const cwd = requestData.cwd || '';
+            const encoding = requestData.encoding || 'ascii';
 
             if (!messages.some(m => m.role === 'system')) {
-                messages.unshift({ role: 'system', content: SYSTEM_PROMPT });
+                messages.unshift({ role: 'system', content: getSystemPrompt(cwd) });
             }
 
-            console.log(`[Bridge] Prompting model: ${model}, messages: ${messages.length}, encoding: ${encoding}, tools: ${enableTools}`);
+            console.log(`[Bridge] Prompting model: ${model}, CWD: "${cwd}", messages: ${messages.length}, encoding: ${encoding}, tools: ${enableTools}`);
 
             res.writeHead(200, {
                 'Content-Type': 'application/x-ndjson; charset=latin1',
