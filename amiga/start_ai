@@ -1,0 +1,5 @@
+; Amiga AI Shell Runner script for AmigaDOS
+.key ARGS/F
+.bra {
+.ket }
+NodeAmiga ai.js {ARGS}

@@ -1,0 +1,7 @@
+{
+  "host": "127.0.0.1",
+  "port": 11435,
+  "model": "qwen3.8:latest",
+  "autoExecute": false,
+  "timeout": 60000
+}

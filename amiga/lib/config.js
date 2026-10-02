@@ -1,0 +1,60 @@
+/*
+ * config.js - Configuration loader for Amiga AI Shell
+ */
+
+var fs = require('fs');
+
+var defaultConfig = {
+    // In WinUAE with bsdsocket_emu=true, localhost 127.0.0.1 connects to PC
+    // On real Amiga, change this to your PC LAN IP (e.g. 192.168.1.100)
+    host: "127.0.0.1",
+    port: 11435,
+    model: "qwen3.8:latest",
+    autoExecute: false,
+    timeout: 60000, // 60s socket timeout
+    systemPrompt: null
+};
+
+function loadConfig(customFile) {
+    var cfg = {};
+    // Clone default config
+    var k;
+    for (k in defaultConfig) {
+        if (defaultConfig.hasOwnProperty(k)) {
+            cfg[k] = defaultConfig[k];
+        }
+    }
+
+    var searchPaths = [
+        customFile,
+        "ai.json",
+        "PROGDIR:ai.json",
+        "ENV:ai.json"
+    ];
+
+    var i;
+    for (i = 0; i < searchPaths.length; i++) {
+        var p = searchPaths[i];
+        if (p && fs.existsSync(p)) {
+            try {
+                var content = fs.readFileSync(p, 'utf8');
+                var parsed = JSON.parse(content);
+                for (var key in parsed) {
+                    if (parsed.hasOwnProperty(key)) {
+                        cfg[key] = parsed[key];
+                    }
+                }
+                break;
+            } catch (e) {
+                // Ignore parse errors on secondary configs
+            }
+        }
+    }
+
+    return cfg;
+}
+
+module.exports = {
+    defaultConfig: defaultConfig,
+    loadConfig: loadConfig
+};
