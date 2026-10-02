@@ -286,21 +286,37 @@ const server = http.createServer(async (req, res) => {
         const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
         log(`[Status] Health check from ${clientIp}`);
         const models = await getOllamaModels();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
+        const jsonBody = JSON.stringify({
             status: 'online',
             service: 'Amiga AI Bridge',
             default_model: DEFAULT_MODEL,
             ollama: `${OLLAMA_HOST}:${OLLAMA_PORT}`,
             models: models.map(m => m.name)
-        }, null, 2));
+        }, null, 2);
+        const byteLen = Buffer.byteLength(jsonBody, 'utf8');
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': byteLen,
+            'Connection': 'close'
+        });
+        res.end(jsonBody, () => {
+            if (res.socket) try { res.socket.end(); } catch (e) {}
+        });
         return;
     }
 
     if (req.method === 'GET' && req.url === '/api/models') {
         const models = await getOllamaModels();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ models }));
+        const jsonBody = JSON.stringify({ models }, null, 2);
+        const byteLen = Buffer.byteLength(jsonBody, 'utf8');
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': byteLen,
+            'Connection': 'close'
+        });
+        res.end(jsonBody, () => {
+            if (res.socket) try { res.socket.end(); } catch (e) {}
+        });
         return;
     }
 
@@ -368,7 +384,7 @@ const server = http.createServer(async (req, res) => {
             let tokenCount = 0;
             let fullTextReceived = '';
 
-            req.on('close', () => {
+            res.on('close', () => {
                 if (!res.writableEnded) {
                     log(`[Chat CLIENT DISCONNECT] Amiga closed socket early! (Tokens sent: ${tokenCount})`);
                 }
@@ -489,8 +505,15 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
+    const notFoundBody = JSON.stringify({ error: 'Not found' });
+    res.writeHead(404, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(notFoundBody, 'utf8'),
+        'Connection': 'close'
+    });
+    res.end(notFoundBody, () => {
+        if (res.socket) try { res.socket.end(); } catch (e) {}
+    });
 });
 
 server.listen(PORT, '0.0.0.0', () => {

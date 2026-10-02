@@ -17,10 +17,17 @@ function readFile(path) {
     }
     try {
         var content = fs.readFileSync(path, 'utf8');
+        var maxLen = 16384;
+        var truncated = false;
+        if (content.length > maxLen) {
+            content = content.substring(0, maxLen) + "\n... [TRUNCATED - File exceeds 16KB. NodeAmiga memory protection] ...";
+            truncated = true;
+        }
         return {
             success: true,
             path: path,
             size: content.length,
+            truncated: truncated,
             content: content
         };
     } catch (e) {

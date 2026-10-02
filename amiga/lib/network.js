@@ -174,7 +174,7 @@ function getByteLength(str) {
                 break;
             }
 
-            if (!rawLine || typeof rawLine !== 'string') {
+            if (rawLine === null || rawLine === undefined || typeof rawLine !== 'string') {
                 debugLog(cfg, "sock.readLine returned non-string or EOF: " + rawLine);
                 break;
             }
@@ -293,17 +293,40 @@ function getStatus(cfg) {
         var body = "";
 
         while (true) {
-            var rawLine = sock.readLine();
-            if (!rawLine || typeof rawLine !== 'string') break;
+            var rawLine = null;
+            try {
+                rawLine = sock.readLine();
+            } catch (re) {
+                break;
+            }
+            if (rawLine === null || rawLine === undefined || typeof rawLine !== 'string') break;
             var line = String(rawLine).trim();
 
             if (inHeaders) {
                 if (line === "") inHeaders = false;
                 continue;
             }
-            body += rawLine + "\n";
+            // Skip chunk-size hex lines if any proxy or server used chunked
+            if (line.match(/^[0-9a-fA-F]+$/) && !body) {
+                continue;
+            }
+            if (line === "0" && body) {
+                continue;
+            }
+            body += line;
         }
-        sock.close();
+        try { sock.close(); } catch (ignore) {}
+
+        if (!body) {
+            return { success: false, error: "Empty response from server" };
+        }
+
+        // Find JSON object boundaries {...}
+        var startIdx = body.indexOf('{');
+        var endIdx = body.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx >= startIdx) {
+            body = body.substring(startIdx, endIdx + 1);
+        }
 
         var json = JSON.parse(body);
         return { success: true, data: json };
