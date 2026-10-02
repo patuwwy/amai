@@ -5,11 +5,24 @@
  */
 
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = process.env.BRIDGE_PORT || 11435;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
 const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'qwen3.8:latest';
+
+const LOG_FILE = path.join(__dirname, 'bridge.log');
+
+function log(msg) {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const line = `[${timestamp}] ${msg}`;
+    console.log(line);
+    try {
+        fs.appendFileSync(LOG_FILE, line + '\n', 'utf8');
+    } catch (e) {}
+}
 
 // Character maps for Amiga console transliteration
 const POLISH_ASCII_MAP = {
@@ -255,6 +268,14 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+    // Immediate TCP delivery to Amiga (disable Nagle's algorithm)
+    if (req.socket && typeof req.socket.setNoDelay === 'function') {
+        req.socket.setNoDelay(true);
+    }
+    if (res.socket && typeof res.socket.setNoDelay === 'function') {
+        res.socket.setNoDelay(true);
+    }
+
     if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
@@ -262,6 +283,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && (req.url === '/' || req.url === '/api/status')) {
+        const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
+        log(`[Status] Health check from ${clientIp}`);
         const models = await getOllamaModels();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -282,6 +305,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && req.url === '/api/chat') {
+        const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
@@ -289,6 +313,7 @@ const server = http.createServer(async (req, res) => {
             try {
                 requestData = JSON.parse(body);
             } catch (e) {
+                log(`[Chat ERROR] Invalid JSON body from ${clientIp}: ${e.message}`);
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Invalid JSON body' }));
                 return;
@@ -304,19 +329,25 @@ const server = http.createServer(async (req, res) => {
                 messages.unshift({ role: 'system', content: getSystemPrompt(cwd) });
             }
 
-            console.log(`[Bridge] Prompting model: ${model}, CWD: "${cwd}", messages: ${messages.length}, encoding: ${encoding}, tools: ${enableTools}`);
+            const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0];
+            const userPreview = lastUserMsg ? JSON.stringify(lastUserMsg.content || '').substring(0, 80) : '';
 
+            log(`[Chat START] From: ${clientIp} | Model: ${model} | Msgs: ${messages.length} | CWD: "${cwd}" | Enc: ${encoding} | Prompt: ${userPreview}`);
+
+            // Direct NDJSON line stream with Connection: close (no HTTP chunk framing to avoid Amiga parse issues)
             res.writeHead(200, {
                 'Content-Type': 'application/x-ndjson; charset=latin1',
-                'Transfer-Encoding': 'chunked',
                 'Cache-Control': 'no-cache',
                 'Connection': 'close'
             });
 
             const sendEvent = (obj) => {
                 try {
-                    res.write(JSON.stringify(obj) + '\n');
-                } catch (e) {}
+                    const json = JSON.stringify(obj);
+                    res.write(json + '\n');
+                } catch (e) {
+                    log(`[Chat ERROR] Failed to sendEvent (${obj.event}): ${e.message}`);
+                }
             };
 
             sendEvent({ event: 'connected', model: model });
@@ -324,10 +355,20 @@ const server = http.createServer(async (req, res) => {
             let lastActivityTime = Date.now();
             const heartbeatTimer = setInterval(() => {
                 if (Date.now() - lastActivityTime >= 2000) {
+                    log(`[Chat Heartbeat] Keepalive ping sent to Amiga`);
                     sendEvent({ event: 'heartbeat' });
                     lastActivityTime = Date.now();
                 }
             }, 2000);
+
+            let tokenCount = 0;
+            let fullTextReceived = '';
+
+            req.on('close', () => {
+                if (!res.writableEnded) {
+                    log(`[Chat CLIENT DISCONNECT] Amiga closed socket early! (Tokens sent: ${tokenCount})`);
+                }
+            });
 
             try {
                 const ollamaPayload = {
@@ -340,6 +381,7 @@ const server = http.createServer(async (req, res) => {
                     ollamaPayload.tools = AMIGA_TOOLS;
                 }
 
+                log(`[Chat Ollama] Connecting to Ollama on http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/chat...`);
                 const ollamaResp = await fetch(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -349,10 +391,13 @@ const server = http.createServer(async (req, res) => {
                 if (!ollamaResp.ok) {
                     clearInterval(heartbeatTimer);
                     const errorText = await ollamaResp.text();
+                    log(`[Chat Ollama ERROR] Status: ${ollamaResp.status} | ${errorText}`);
                     sendEvent({ event: 'error', message: `Ollama error ${ollamaResp.status}: ${errorText}` });
                     res.end();
                     return;
                 }
+
+                log(`[Chat Ollama OK] Stream opened from Ollama. Reading chunks...`);
 
                 const reader = ollamaResp.body.getReader();
                 const decoder = new TextDecoder('utf-8');
@@ -361,7 +406,10 @@ const server = http.createServer(async (req, res) => {
 
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        log(`[Chat Ollama EOF] reader.read() returned done=true`);
+                        break;
+                    }
 
                     lastActivityTime = Date.now();
                     buffer += decoder.decode(value, { stream: true });
@@ -377,23 +425,33 @@ const server = http.createServer(async (req, res) => {
                             const msg = chunk.message;
                             if (msg) {
                                 if (msg.content) {
+                                    tokenCount++;
+                                    fullTextReceived += msg.content;
                                     // Sanitize token for Amiga display
                                     const sanitizedToken = sanitizeForAmiga(msg.content, encoding);
                                     sendEvent({
                                         event: 'token',
                                         text: sanitizedToken
                                     });
+                                    if (tokenCount <= 5 || tokenCount % 10 === 0) {
+                                        log(`[Chat Token #${tokenCount}] "${sanitizedToken.replace(/\n/g, '\\n')}"`);
+                                    }
                                 }
 
                                 if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
                                     for (const tc of msg.tool_calls) {
                                         accumulatedToolCalls.push(tc);
+                                        const fnName = tc.function ? tc.function.name : (tc.name || 'unknown');
+                                        log(`[Chat Tool Call] ${fnName} args: ${JSON.stringify(tc.function ? tc.function.arguments : {})}`);
                                     }
                                 }
                             }
 
                             if (chunk.done) {
+                                log(`[Chat Ollama Done] reason: ${chunk.done_reason || 'stop'}, eval_count: ${chunk.eval_count}, duration: ${chunk.total_duration ? Math.round(chunk.total_duration/1e6) + 'ms' : '?'}`);
+
                                 if (accumulatedToolCalls.length > 0) {
+                                    log(`[Chat Sending tool_calls event] Count: ${accumulatedToolCalls.length}`);
                                     sendEvent({
                                         event: 'tool_calls',
                                         calls: accumulatedToolCalls
@@ -407,17 +465,19 @@ const server = http.createServer(async (req, res) => {
                                 });
                             }
                         } catch (err) {
-                            console.error('[Bridge] Failed to parse Ollama chunk line:', err.message);
+                            log(`[Chat Parse ERROR] Chunk parse failed: ${err.message} on line: ${trimmed.substring(0, 100)}`);
                         }
                     }
                 }
 
                 clearInterval(heartbeatTimer);
-                res.end();
-                console.log(`[Bridge] Completed request for ${model}`);
+                log(`[Chat FINISH] All tokens streamed (${tokenCount} tokens, ${fullTextReceived.length} chars). Calling res.end()...`);
+                res.end(() => {
+                    log(`[Chat COMPLETE] Response closed and flushed to Amiga.`);
+                });
             } catch (err) {
                 clearInterval(heartbeatTimer);
-                console.error('[Bridge] Communication error:', err.message);
+                log(`[Chat Exception] ${err.message}`);
                 sendEvent({ event: 'error', message: err.message });
                 res.end();
             }

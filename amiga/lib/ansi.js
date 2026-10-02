@@ -4,6 +4,7 @@
  */
 
 var ANSI = {
+    clearScreen: "\x1b[2J\x1b[H",
     reset: "\x1b[0m",
     bold: "\x1b[1m",
     dim: "\x1b[2m",

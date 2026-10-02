@@ -188,9 +188,11 @@ function sendChat(cfg, messages, callbacks) {
             } else if (evt.event === 'done') {
                 debugLog(cfg, "Done event received. Total duration: " + evt.total_duration + "ns, tokens: " + evt.eval_count);
                 if (callbacks.onDone) callbacks.onDone(evt);
+                break; // Response stream complete - exit loop immediately
             } else if (evt.event === 'error') {
                 debugLog(cfg, "Error event received: " + evt.message);
                 if (callbacks.onError) callbacks.onError(evt.message);
+                break; // Error event received - exit loop immediately
             }
         }
     } catch (e) {
