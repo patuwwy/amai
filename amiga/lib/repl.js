@@ -17,10 +17,10 @@ function startRepl(cfg) {
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
     console.log(" Model:   " + ansi.info(cfg.model));
     console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port));
-    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/read <file>") + ", " + ansi.warn("/run <cmd>") + ", " + ansi.warn("/model") + ", " + ansi.warn("/exit"));
+    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/read <file>") + ", " + ansi.warn("/run <cmd>") + ", " + ansi.warn("/exit"));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "--------------------------------------------------------\n")));
 
-    var rl = readline.createInterface();
+    var rl = readline.createInterface({ prompt: 'amiga-ai> ' });
     var promptStr = ansi.bold(ansi.c(ansi.ANSI.green, "amiga-ai> "));
 
     function runAgentLoop(round, callbackDone) {
@@ -33,25 +33,34 @@ function startRepl(cfg) {
         var tokenCount = 0;
         process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "AI: ")));
 
-        var result = network.sendChat(cfg, messages, {
-            onConnected: function(model) {},
-            onHeartbeat: function() {
-                if (tokenCount === 0) {
-                    process.stdout.write(ansi.dim("."));
+        var result = null;
+        try {
+            result = network.sendChat(cfg, messages, {
+                onConnected: function(model) {},
+                onHeartbeat: function() {
+                    if (tokenCount === 0) {
+                        process.stdout.write(ansi.dim("."));
+                    }
+                },
+                onToken: function(text) {
+                    tokenCount++;
+                    process.stdout.write(text);
+                },
+                onToolCalls: function(calls) {},
+                onDone: function(stats) {
+                    console.log(""); // Trailing newline
+                },
+                onError: function(err) {
+                    console.log("\n" + ansi.error("[Connection Error] " + err));
+                    console.log(ansi.dim("Tip: If running in WinUAE, make sure 'bsdsocket.library' is enabled,"));
+                    console.log(ansi.dim("or try switching host to your PC IP with: /host 192.168.1.16"));
                 }
-            },
-            onToken: function(text) {
-                tokenCount++;
-                process.stdout.write(text);
-            },
-            onToolCalls: function(calls) {},
-            onDone: function(stats) {
-                console.log(""); // Trailing newline
-            },
-            onError: function(err) {
-                console.log("\n" + ansi.error("[Error] " + err));
-            }
-        });
+            });
+        } catch (e) {
+            console.log("\n" + ansi.error("[Exception] " + network.errToStr(e)));
+            callbackDone();
+            return;
+        }
 
         if (!result) {
             callbackDone();
@@ -71,7 +80,6 @@ function startRepl(cfg) {
 
             function processNextTool() {
                 if (callIdx >= result.toolCalls.length) {
-                    // All tools in this step executed -> trigger next agent round!
                     runAgentLoop(round + 1, callbackDone);
                     return;
                 }
@@ -134,7 +142,6 @@ function startRepl(cfg) {
 
             processNextTool();
         } else {
-            // No tool calls -> turn finished
             callbackDone();
         }
     }
@@ -157,16 +164,17 @@ function startRepl(cfg) {
                 if (cmd === '/exit' || cmd === '/quit') {
                     console.log("\n" + ansi.info("Goodbye from Amiga AI!"));
                     try { rl.close(); } catch (ignore) {}
-                    return; // Terminates the loop
+                    return;
                 }
 
                 if (cmd === '/help') {
                     console.log(ansi.bold("\nAvailable Commands:"));
                     console.log("  " + ansi.info("/help") + "             - Show this help screen");
+                    console.log("  " + ansi.info("/status") + "          - Check connection to PC bridge and Ollama");
+                    console.log("  " + ansi.info("/host <ip>") + "       - Change bridge host IP (e.g. /host 192.168.1.16)");
                     console.log("  " + ansi.info("/read <file>") + "     - Read Amiga file into AI context (e.g. /read RAM:main.c)");
                     console.log("  " + ansi.info("/run <cmd>") + "       - Run AmigaDOS command directly (e.g. /run dir RAM:)");
                     console.log("  " + ansi.info("/model [name]") + "    - Show or switch active model (e.g. /model qwen3.8:latest)");
-                    console.log("  " + ansi.info("/status") + "          - Check connection to PC bridge and Ollama");
                     console.log("  " + ansi.info("/auto [on|off]") + "   - Toggle auto-execution of AI tools without prompt");
                     console.log("  " + ansi.info("/clear") + "           - Clear conversation context");
                     console.log("  " + ansi.info("/exit") + "            - Exit Amiga AI Shell\n");
@@ -194,16 +202,44 @@ function startRepl(cfg) {
                     return;
                 }
 
-                if (cmd === '/status') {
-                    console.log("Connecting to bridge at " + cfg.host + ":" + cfg.port + "...");
+                if (cmd === '/host') {
+                    if (arg) {
+                        cfg.host = arg;
+                        console.log(ansi.success("Switched host to: " + cfg.host + "\n"));
+                    } else {
+                        console.log("Current host: " + ansi.info(cfg.host) + "\n");
+                    }
+                    promptLoop();
+                    return;
+                }
+
+                if (cmd === '/status' || cmd === '/test') {
+                    console.log("Testing connection to " + cfg.host + ":" + cfg.port + "...");
                     var st = network.getStatus(cfg);
                     if (st.success) {
-                        console.log(ansi.success("[Bridge Online]"));
-                        console.log("  Default Model: " + ansi.info(st.data.default_model));
-                        console.log("  Ollama Target: " + st.data.ollama);
-                        console.log("  Available Models: " + (st.data.models ? st.data.models.join(", ") : "none") + "\n");
+                        console.log(ansi.success("[Bridge Online!]"));
+                        console.log("  Host:    " + ansi.info(cfg.host + ":" + cfg.port));
+                        console.log("  Model:   " + ansi.info(st.data.default_model));
+                        console.log("  Ollama:  " + st.data.ollama);
+                        console.log("  Models:  " + (st.data.models ? st.data.models.join(", ") : "none") + "\n");
                     } else {
-                        console.log(ansi.error("[Bridge Offline] " + st.error + "\n"));
+                        console.log(ansi.error("[Failed to connect to " + cfg.host + ":" + cfg.port + "] " + st.error));
+                        
+                        // If 127.0.0.1 failed, suggest or test LAN IP
+                        var lanIp = "192.168.1.16";
+                        if (cfg.host !== lanIp) {
+                            console.log(ansi.info("Attempting auto-discovery on PC LAN IP (" + lanIp + ")..."));
+                            var testCfg = { host: lanIp, port: cfg.port };
+                            var stLan = network.getStatus(testCfg);
+                            if (stLan.success) {
+                                cfg.host = lanIp;
+                                console.log(ansi.success("[SUCCESS!] Connected to PC on " + lanIp + ":" + cfg.port));
+                                console.log("Host automatically updated to: " + ansi.info(cfg.host) + "\n");
+                            } else {
+                                console.log(ansi.warn("Also failed on " + lanIp + "."));
+                                console.log(ansi.dim("Please check if 'bsdsocket.library' is enabled in WinUAE settings.\n"));
+                            }
+                        }
                     }
                     promptLoop();
                     return;
@@ -215,10 +251,9 @@ function startRepl(cfg) {
                         console.log(ansi.success("Switched model to: " + cfg.model + "\n"));
                     } else {
                         console.log("Current model: " + ansi.info(cfg.model));
-                        console.log("Querying available models from bridge...");
                         var st2 = network.getStatus(cfg);
                         if (st2.success && st2.data.models) {
-                            console.log("Available: " + st2.data.models.join(", "));
+                            console.log("Available on bridge: " + st2.data.models.join(", "));
                         }
                         console.log("Usage: /model <model_name>\n");
                     }

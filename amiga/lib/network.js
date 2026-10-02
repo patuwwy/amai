@@ -1,34 +1,77 @@
 /*
  * network.js - Communication with Amiga AI Bridge on PC
- * Uses NodeAmiga's 'net' module for streaming responses and keepalive.
+ * Robust error handling, null safety, and host diagnostics.
  */
 
-var net = require('net');
+var net = null;
+var http = null;
+try { net = require('net'); } catch (e) {}
+try { http = require('http'); } catch (e) {}
+
+/**
+ * Safely extract error message string
+ */
+function errToStr(e) {
+    if (!e) return "Unknown error";
+    if (typeof e === 'string') return e;
+    if (e.message) return e.message;
+    try {
+        return JSON.stringify(e);
+    } catch (ignore) {
+        return String(e);
+    }
+}
+
+/**
+ * Tests connection to a given host and port.
+ */
+function testConnection(host, port) {
+    if (!net || typeof net.connect !== 'function') {
+        return { success: false, error: "NodeAmiga 'net' module is not available" };
+    }
+
+    var sock = null;
+    try {
+        sock = net.connect(host, port, 5000);
+        if (!sock) {
+            return { success: false, error: "net.connect returned null (bsdsocket offline?)" };
+        }
+        try { sock.close(); } catch (ignore) {}
+        return { success: true };
+    } catch (e) {
+        if (sock) {
+            try { sock.close(); } catch (ignore) {}
+        }
+        return { success: false, error: errToStr(e) };
+    }
+}
 
 /**
  * Sends a chat / prompt request to the PC Bridge and streams the response.
- *
- * @param {Object} cfg - Configuration { host, port, model, timeout }
- * @param {Array} messages - Chat messages array [{role, content}, ...]
- * @param {Object} callbacks - Event handlers:
- *   onConnected(model)
- *   onHeartbeat()
- *   onToken(text)
- *   onToolCalls(calls)
- *   onDone(stats)
- *   onError(err)
  */
 function sendChat(cfg, messages, callbacks) {
     var host = cfg.host || '127.0.0.1';
     var port = cfg.port || 11435;
     var timeout = cfg.timeout || 60000;
 
-    var sock;
+    var sock = null;
+
     try {
+        if (!net || typeof net.connect !== 'function') {
+            throw new Error("NodeAmiga 'net' module is not available. Check bsdsocket.library.");
+        }
+
         sock = net.connect(host, port, timeout);
     } catch (e) {
-        if (callbacks.onError) callbacks.onError("Cannot connect to Bridge at " + host + ":" + port + " (" + e.message + ")");
-        return;
+        var msg = "Cannot connect to Bridge at " + host + ":" + port + " (" + errToStr(e) + ").";
+        if (callbacks.onError) callbacks.onError(msg);
+        return null;
+    }
+
+    if (!sock) {
+        var msgNull = "Connection to " + host + ":" + port + " failed (socket is null). Check bsdsocket.library in WinUAE / Amiga TCP/IP.";
+        if (callbacks.onError) callbacks.onError(msgNull);
+        return null;
     }
 
     var payload = JSON.stringify({
@@ -47,9 +90,9 @@ function sendChat(cfg, messages, callbacks) {
     try {
         sock.write(req);
     } catch (e) {
-        sock.close();
-        if (callbacks.onError) callbacks.onError("Write error: " + e.message);
-        return;
+        try { sock.close(); } catch (ignore) {}
+        if (callbacks.onError) callbacks.onError("Write error: " + errToStr(e));
+        return null;
     }
 
     var inHeaders = true;
@@ -58,15 +101,22 @@ function sendChat(cfg, messages, callbacks) {
 
     try {
         while (true) {
-            var rawLine = sock.readLine();
+            var rawLine = null;
+            try {
+                rawLine = sock.readLine();
+            } catch (readErr) {
+                if (callbacks.onError) callbacks.onError("Read error: " + errToStr(readErr));
+                break;
+            }
+
             if (rawLine === null) {
-                // Connection closed by server
+                // Connection finished
                 break;
             }
 
             var line = rawLine.trim();
 
-            // Skip HTTP headers
+            // Skip HTTP response headers
             if (inHeaders) {
                 if (line === "") {
                     inHeaders = false;
@@ -76,8 +126,7 @@ function sendChat(cfg, messages, callbacks) {
 
             if (!line) continue;
 
-            // In HTTP/1.1 chunked, hex lengths may appear.
-            // All our JSON events start with '{'.
+            // In HTTP chunked, hex lengths may appear. JSON lines start with '{'
             if (line.charAt(0) !== '{') {
                 continue;
             }
@@ -85,8 +134,7 @@ function sendChat(cfg, messages, callbacks) {
             var evt;
             try {
                 evt = JSON.parse(line);
-            } catch (e) {
-                // Invalid JSON fragment
+            } catch (jsonErr) {
                 continue;
             }
 
@@ -107,9 +155,11 @@ function sendChat(cfg, messages, callbacks) {
             }
         }
     } catch (e) {
-        if (callbacks.onError) callbacks.onError("Socket read error: " + e.message);
+        if (callbacks.onError) callbacks.onError("Stream processing error: " + errToStr(e));
     } finally {
-        try { sock.close(); } catch (ignore) {}
+        if (sock) {
+            try { sock.close(); } catch (ignore) {}
+        }
     }
 
     return {
@@ -125,18 +175,21 @@ function getStatus(cfg) {
     var host = cfg.host || '127.0.0.1';
     var port = cfg.port || 11435;
 
-    var sock;
+    var sock = null;
     try {
-        sock = net.connect(host, port, 10000);
-    } catch (e) {
-        return { success: false, error: "Cannot connect to " + host + ":" + port + " (" + e.message + ")" };
-    }
+        if (!net || typeof net.connect !== 'function') {
+            return { success: false, error: "'net' module not available" };
+        }
 
-    var req = "GET /api/status HTTP/1.0\r\n" +
-              "Host: " + host + ":" + port + "\r\n" +
-              "Connection: close\r\n\r\n";
+        sock = net.connect(host, port, 5000);
+        if (!sock) {
+            return { success: false, error: "Connection returned null to " + host + ":" + port };
+        }
 
-    try {
+        var req = "GET /api/status HTTP/1.0\r\n" +
+                  "Host: " + host + ":" + port + "\r\n" +
+                  "Connection: close\r\n\r\n";
+
         sock.write(req);
         var inHeaders = true;
         var body = "";
@@ -157,12 +210,16 @@ function getStatus(cfg) {
         var json = JSON.parse(body);
         return { success: true, data: json };
     } catch (e) {
-        try { sock.close(); } catch (ignore) {}
-        return { success: false, error: e.message };
+        if (sock) {
+            try { sock.close(); } catch (ignore) {}
+        }
+        return { success: false, error: errToStr(e) };
     }
 }
 
 module.exports = {
+    testConnection: testConnection,
     sendChat: sendChat,
-    getStatus: getStatus
+    getStatus: getStatus,
+    errToStr: errToStr
 };
