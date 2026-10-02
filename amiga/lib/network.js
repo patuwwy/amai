@@ -174,12 +174,12 @@ function getByteLength(str) {
                 break;
             }
 
-            if (rawLine === null) {
-                debugLog(cfg, "sock.readLine returned null (end of stream / connection closed).");
+            if (!rawLine || typeof rawLine !== 'string') {
+                debugLog(cfg, "sock.readLine returned non-string or EOF: " + rawLine);
                 break;
             }
 
-            var line = rawLine.trim();
+            var line = String(rawLine).trim();
 
             // Skip HTTP response headers
             if (inHeaders) {
@@ -196,9 +196,9 @@ function getByteLength(str) {
 
             lineCount++;
 
-            // In HTTP chunked, hex lengths may appear. JSON lines start with '{'
+            // In HTTP chunked or NDJSON, JSON lines start with '{'
             if (line.charAt(0) !== '{') {
-                debugLog(cfg, "Skipping non-JSON chunk line: " + line);
+                debugLog(cfg, "Skipping non-JSON line: " + line);
                 continue;
             }
 
@@ -210,26 +210,41 @@ function getByteLength(str) {
                 continue;
             }
 
+            if (!evt || typeof evt !== 'object') continue;
+
             debugLog(cfg, "Event: " + evt.event + (evt.text ? " ('" + evt.text + "')" : ""));
 
             if (evt.event === 'connected') {
-                if (callbacks.onConnected) callbacks.onConnected(evt.model);
+                if (callbacks && typeof callbacks.onConnected === 'function') {
+                    try { callbacks.onConnected(evt.model); } catch (e) {}
+                }
             } else if (evt.event === 'heartbeat') {
-                if (callbacks.onHeartbeat) callbacks.onHeartbeat();
+                if (callbacks && typeof callbacks.onHeartbeat === 'function') {
+                    try { callbacks.onHeartbeat(); } catch (e) {}
+                }
             } else if (evt.event === 'token') {
-                fullContent += evt.text;
-                if (callbacks.onToken) callbacks.onToken(evt.text);
+                var tokenText = (evt.text !== undefined && evt.text !== null) ? String(evt.text) : "";
+                fullContent += tokenText;
+                if (callbacks && typeof callbacks.onToken === 'function') {
+                    try { callbacks.onToken(tokenText); } catch (e) {}
+                }
             } else if (evt.event === 'tool_calls') {
                 accumulatedCalls = evt.calls;
                 debugLog(cfg, "Received tool_calls: " + JSON.stringify(evt.calls));
-                if (callbacks.onToolCalls) callbacks.onToolCalls(evt.calls);
+                if (callbacks && typeof callbacks.onToolCalls === 'function') {
+                    try { callbacks.onToolCalls(evt.calls); } catch (e) {}
+                }
             } else if (evt.event === 'done') {
                 debugLog(cfg, "Done event received. Total duration: " + evt.total_duration + "ns, tokens: " + evt.eval_count);
-                if (callbacks.onDone) callbacks.onDone(evt);
+                if (callbacks && typeof callbacks.onDone === 'function') {
+                    try { callbacks.onDone(evt); } catch (e) {}
+                }
                 break; // Response stream complete - exit loop immediately
             } else if (evt.event === 'error') {
                 debugLog(cfg, "Error event received: " + evt.message);
-                if (callbacks.onError) callbacks.onError(evt.message);
+                if (callbacks && typeof callbacks.onError === 'function') {
+                    try { callbacks.onError(evt.message); } catch (e) {}
+                }
                 break; // Error event received - exit loop immediately
             }
         }
@@ -279,8 +294,8 @@ function getStatus(cfg) {
 
         while (true) {
             var rawLine = sock.readLine();
-            if (rawLine === null) break;
-            var line = rawLine.trim();
+            if (!rawLine || typeof rawLine !== 'string') break;
+            var line = String(rawLine).trim();
 
             if (inHeaders) {
                 if (line === "") inHeaders = false;
