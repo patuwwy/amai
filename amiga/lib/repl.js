@@ -17,7 +17,10 @@ function startRepl(cfg) {
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
     console.log(" Model:   " + ansi.info(cfg.model));
     console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port));
-    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/read <file>") + ", " + ansi.warn("/run <cmd>") + ", " + ansi.warn("/exit"));
+    if (cfg.debug) {
+        console.log(" Debug:   " + ansi.warn("ENABLED (verbose logging)"));
+    }
+    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/debug") + ", " + ansi.warn("/exit"));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "--------------------------------------------------------\n")));
 
     var rl = readline.createInterface({ prompt: 'amiga-ai> ' });
@@ -176,6 +179,7 @@ function startRepl(cfg) {
                     console.log("  " + ansi.info("/run <cmd>") + "       - Run AmigaDOS command directly (e.g. /run dir RAM:)");
                     console.log("  " + ansi.info("/model [name]") + "    - Show or switch active model (e.g. /model qwen3.8:latest)");
                     console.log("  " + ansi.info("/auto [on|off]") + "   - Toggle auto-execution of AI tools without prompt");
+                    console.log("  " + ansi.info("/debug [on|off]") + "  - Toggle verbose debug logging");
                     console.log("  " + ansi.info("/clear") + "           - Clear conversation context");
                     console.log("  " + ansi.info("/exit") + "            - Exit Amiga AI Shell\n");
                     promptLoop();
@@ -198,6 +202,19 @@ function startRepl(cfg) {
                         cfg.autoExecute = !cfg.autoExecute;
                     }
                     console.log("Auto-execute tools: " + (cfg.autoExecute ? ansi.success("ENABLED") : ansi.warn("DISABLED")) + "\n");
+                    promptLoop();
+                    return;
+                }
+
+                if (cmd === '/debug') {
+                    if (arg === 'on') {
+                        cfg.debug = true;
+                    } else if (arg === 'off') {
+                        cfg.debug = false;
+                    } else {
+                        cfg.debug = !cfg.debug;
+                    }
+                    console.log("Debug logging: " + (cfg.debug ? ansi.success("ENABLED") : ansi.warn("DISABLED")) + "\n");
                     promptLoop();
                     return;
                 }

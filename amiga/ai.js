@@ -38,6 +38,8 @@ function parseArgs() {
             options.model = args[++i];
         } else if (arg === '-a' || arg === '--auto') {
             options.auto = true;
+        } else if (arg === '-d' || arg === '--debug') {
+            options.debug = true;
         } else if (arg === '-c' || arg === '--config') {
             options.configFile = args[++i];
         } else if (arg === '-v' || arg === '--version') {
@@ -71,6 +73,7 @@ function main() {
     if (opts.port) cfg.port = opts.port;
     if (opts.model) cfg.model = opts.model;
     if (opts.auto) cfg.autoExecute = true;
+    if (opts.debug) cfg.debug = true;
 
     // One-shot query mode
     if (opts.query.length > 0) {

@@ -11,6 +11,7 @@ var defaultConfig = {
     port: 11435,
     model: "qwen3.8:latest",
     autoExecute: false,
+    debug: false,
     timeout: 60000, // 60s socket timeout
     systemPrompt: null
 };
