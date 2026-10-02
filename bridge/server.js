@@ -309,13 +309,17 @@ const server = http.createServer(async (req, res) => {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
+            const expectedLen = req.headers['content-length'];
             let requestData;
             try {
                 requestData = JSON.parse(body);
             } catch (e) {
-                log(`[Chat ERROR] Invalid JSON body from ${clientIp}: ${e.message}`);
+                log(`[Chat ERROR] Invalid JSON body from ${clientIp}: ${e.message} (received ${body.length} bytes, expected ${expectedLen || 'unknown'})`);
+                if (body.length > 0) {
+                    log(`[Chat ERROR Body Tail]: ...${body.substring(Math.max(0, body.length - 200))}`);
+                }
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+                res.end(JSON.stringify({ error: 'Invalid JSON body: ' + e.message }));
                 return;
             }
 

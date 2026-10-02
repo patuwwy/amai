@@ -102,17 +102,55 @@ function sendChat(cfg, messages, callbacks) {
         cwd: currentDir
     });
 
-    var req = "POST /api/chat HTTP/1.0\r\n" +
-              "Host: " + host + ":" + port + "\r\n" +
-              "Content-Type: application/json\r\n" +
-              "Content-Length: " + payload.length + "\r\n" +
-              "Connection: close\r\n\r\n" +
-              payload;
+function getByteLength(str) {
+    if (!str) return 0;
+    try {
+        if (typeof Buffer !== 'undefined' && typeof Buffer.byteLength === 'function') {
+            return Buffer.byteLength(str, 'utf8');
+        }
+    } catch (e) {}
+    var bytes = 0;
+    for (var i = 0; i < str.length; i++) {
+        var code = str.charCodeAt(i);
+        if (code <= 0x7f) {
+            bytes += 1;
+        } else if (code <= 0x7ff) {
+            bytes += 2;
+        } else if (code >= 0xd800 && code <= 0xdbff) {
+            bytes += 4;
+            i++;
+        } else {
+            bytes += 3;
+        }
+    }
+    return bytes;
+}
+
+    var payloadBytes = getByteLength(payload);
+
+    var reqHeaders = "POST /api/chat HTTP/1.0\r\n" +
+                     "Host: " + host + ":" + port + "\r\n" +
+                     "Content-Type: application/json\r\n" +
+                     "Content-Length: " + payloadBytes + "\r\n" +
+                     "Connection: close\r\n\r\n";
 
     try {
-        debugLog(cfg, "Sending " + req.length + " bytes over socket...");
-        sock.write(req);
-        debugLog(cfg, "Request sent. Awaiting response stream...");
+        debugLog(cfg, "Sending " + (reqHeaders.length + payloadBytes) + " bytes over socket (headers: " + reqHeaders.length + ", body: " + payloadBytes + ")...");
+        // 1. Send HTTP headers
+        sock.write(reqHeaders);
+
+        // 2. Send payload in 1024-byte chunks to prevent Amiga TCP socket buffer truncation
+        var chunkSize = 1024;
+        var offset = 0;
+        while (offset < payload.length) {
+            var end = offset + chunkSize;
+            if (end > payload.length) end = payload.length;
+            var chunk = payload.substring(offset, end);
+            sock.write(chunk);
+            offset = end;
+        }
+
+        debugLog(cfg, "Request fully sent. Awaiting response stream...");
     } catch (e) {
         debugLog(cfg, "sock.write failed: " + errToStr(e));
         try { sock.close(); } catch (ignore) {}

@@ -10,8 +10,9 @@ var network = require('./network');
 
 function startRepl(cfg) {
     var messages = [];
-    var maxAgentRounds = 5;
-
+    var maxAgentRounds = 15;
+    
+    console.log(ansi.ANSI.clearScreen);
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " Amiga AI Shell (v1.0) by Patu^Xenium      ")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
