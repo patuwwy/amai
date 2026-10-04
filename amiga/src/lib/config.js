@@ -30,8 +30,12 @@ function loadConfig(customFile) {
 
     var searchPaths = [
         customFile,
+        "src/amai.config.json",
         "amai.config.json",
+        "PROGDIR:src/amai.config.json",
         "PROGDIR:amai.config.json",
+        "../src/amai.config.json",
+        "PROGDIR:../src/amai.config.json",
         "ENV:amai.config.json",
         "ai.json",
         "PROGDIR:ai.json"
@@ -58,7 +62,7 @@ function loadConfig(customFile) {
         }
     }
 
-    cfg._configPath = configPath || "amai.config.json";
+    cfg._configPath = configPath || (fs.existsSync("src/amai.config.json") ? "src/amai.config.json" : "amai.config.json");
 
     // Normalize approvalMode & autoExecute
     if (cfg.autoExecute === true && (!cfg.approvalMode || cfg.approvalMode === 'manual')) {
@@ -76,7 +80,7 @@ function loadConfig(customFile) {
 }
 
 function saveConfig(cfg, targetFile) {
-    var p = targetFile || cfg._configPath || "amai.config.json";
+    var p = targetFile || cfg._configPath || (fs.existsSync("src/amai.config.json") ? "src/amai.config.json" : "amai.config.json");
     var toSave = {
         host: cfg.host || defaultConfig.host,
         port: cfg.port || defaultConfig.port,

@@ -3,5 +3,7 @@ NodeAmiga/
 node_modules/
 *.log
 amiga/amai
+amiga/bin/amai
+bin/amai
 __pycache__/
 *.pyc

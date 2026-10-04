@@ -15,20 +15,24 @@
 Failat 21
 
 ; Ensure working directory is amiga/ if executed from parent
-If Not Exists amai.js
-    If Exists amiga/amai.js
+If Not Exists src/amai.js
+    If Exists amiga/src/amai.js
         cd amiga
     EndIf
 EndIf
 
 ; Run base NodeAmiga (universal 68000) to detect CPU and configure build
-If Exists NodeAmiga
-    NodeAmiga compile.js --from-script {ARGS$}
+If Exists bin/NodeAmiga
+    bin/NodeAmiga compile.js --from-script {ARGS$}
 Else
-    If Exists PROGDIR:NodeAmiga
-        PROGDIR:NodeAmiga compile.js --from-script {ARGS$}
-    Else
+    If Exists NodeAmiga
         NodeAmiga compile.js --from-script {ARGS$}
+    Else
+        If Exists PROGDIR:NodeAmiga
+            PROGDIR:NodeAmiga compile.js --from-script {ARGS$}
+        Else
+            NodeAmiga compile.js --from-script {ARGS$}
+        EndIf
     EndIf
 EndIf
 

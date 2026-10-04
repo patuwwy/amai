@@ -1,8 +1,21 @@
-; AMAI - Amiga AI Shell Launcher
 .key ARGS/F
-.def ARGS ""
 .bra {
 .ket }
 Failat 21
-cd amiga
-NodeAmiga/NodeAmiga amai.js {ARGS}
+If Not Exists src/amai.js
+    If Exists amiga/src/amai.js
+        cd amiga
+    EndIf
+EndIf
+
+; 1. If compiled standalone binary exists in bin/amai, execute it directly
+If Exists bin/amai
+    bin/amai {ARGS}
+Else
+    ; 2. Otherwise run using NodeAmiga runtime from bin/
+    If Exists bin/NodeAmiga
+        bin/NodeAmiga src/amai.js {ARGS}
+    Else
+        NodeAmiga src/amai.js {ARGS}
+    EndIf
+EndIf

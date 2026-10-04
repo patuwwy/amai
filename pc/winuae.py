@@ -10,7 +10,10 @@ import time
 import argparse
 import ctypes
 from ctypes import wintypes
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
@@ -132,6 +135,9 @@ def capture_screenshot(hwnd, output_path):
     user32.GetWindowRect(hwnd, ctypes.byref(rect))
     w = rect.right - rect.left
     h = rect.bottom - rect.top
+
+    if Image is None:
+        raise RuntimeError("Pillow is required for taking screenshots. Install with: pip install Pillow (or pip install -r pc/requirements.txt)")
 
     if w <= 0 or h <= 0:
         raise ValueError(f"Invalid window size: {w}x{h}")
