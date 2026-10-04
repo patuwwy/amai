@@ -1,0 +1,7 @@
+; AMAI - Amiga AI Shell Launcher
+.key ARGS/F
+.bra {
+.ket }
+Failat 21
+cd amiga
+NodeAmiga/NodeAmiga amai.js {ARGS}

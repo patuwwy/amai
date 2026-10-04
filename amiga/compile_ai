@@ -1,3 +1,0 @@
-; Compile Amiga AI Shell to standalone Amiga executable
-NodeAmiga -compile ai ai.js
-echo "Compilation complete! You can now run 'ai' standalone without NodeAmiga."

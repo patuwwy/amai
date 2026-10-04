@@ -1,4 +1,5 @@
-NodeAmiga.lha
 NodeAmiga/
 *.tmp
 node_modules/
+*.log
+amiga/amai

@@ -1,0 +1,19 @@
+{
+  "name": "amai-bridge",
+  "version": "1.0.0",
+  "description": "AMAI - PC Bridge server in Node.js connecting Amiga NodeAmiga client to local Ollama",
+  "main": "server.js",
+  "scripts": {
+    "start": "node ./server.js"
+  },
+  "keywords": [
+    "amai",
+    "amiga",
+    "ollama",
+    "ai",
+    "bridge",
+    "nodeamiga"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,14 +1,14 @@
 /*
- * ai.js - Main CLI Entry Point for Amiga AI
+ * amai.js - Main CLI Entry Point for AMAI (Amiga AI)
  *
  * Usage on Amiga:
- *   NodeAmiga ai.js
- *   NodeAmiga ai.js -h 192.168.1.50 -m qwen3.8:latest
- *   NodeAmiga ai.js "Write a C function to allocate chip RAM"
+ *   NodeAmiga amai.js
+ *   NodeAmiga amai.js -h 192.168.1.50 -m qwen3.8:latest
+ *   NodeAmiga amai.js "Write a C function to allocate chip RAM"
  *
  * Standalone executable:
- *   NodeAmiga -compile ai ai.js
- *   ai
+ *   NodeAmiga -compile amai amai.js
+ *   amai
  */
 
 var config = require('./lib/config');
@@ -46,11 +46,11 @@ function parseArgs() {
         } else if (arg === '-c' || arg === '--config') {
             options.configFile = args[++i];
         } else if (arg === '-v' || arg === '--version') {
-            console.log("Amiga AI Shell v1.0.0 (NodeAmiga runtime)");
+            console.log("AMAI - Amiga AI Shell v1.0.0 (NodeAmiga runtime)");
             process.exit(0);
         } else if (arg === '--help') {
-            console.log("Amiga AI Shell v1.0.0");
-            console.log("Usage: NodeAmiga ai.js [options] [query]");
+            console.log("AMAI - Amiga AI Shell v1.0.0");
+            console.log("Usage: NodeAmiga amai.js [options] [query]");
             console.log("Options:");
             console.log("  -h, --host <ip>       Bridge server IP (default: 127.0.0.1)");
             console.log("  -p, --port <num>      Bridge server port (default: 11435)");
@@ -80,6 +80,22 @@ function main() {
     if (opts.approvalMode) cfg.approvalMode = opts.approvalMode;
     if (opts.debug) cfg.debug = true;
 
+    function cleanup() {
+        try { network.sendAbort(cfg); } catch (e) {}
+    }
+
+    try {
+        if (typeof process.on === 'function') {
+            process.on('SIGINT', function() {
+                cleanup();
+                if (typeof process.exit === 'function') process.exit(0);
+            });
+            process.on('exit', function() {
+                cleanup();
+            });
+        }
+    } catch (ignore) {}
+
     // One-shot query mode
     if (opts.query.length > 0) {
         var queryText = opts.query.join(' ');
@@ -88,8 +104,16 @@ function main() {
         process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "AI: ")));
         network.sendChat(cfg, messages, {
             onToken: function(t) { process.stdout.write(t); },
-            onDone: function() { console.log(""); },
-            onError: function(e) { console.log("\n" + ansi.error("[Error] " + e)); }
+            onDone: function() {
+                console.log("");
+                cleanup();
+                if (typeof process.exit === 'function') process.exit(0);
+            },
+            onError: function(e) {
+                console.log("\n" + ansi.error("[Error] " + e));
+                cleanup();
+                if (typeof process.exit === 'function') process.exit(1);
+            }
         });
         return;
     }

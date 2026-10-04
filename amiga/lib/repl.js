@@ -14,7 +14,7 @@ function startRepl(cfg) {
     
     console.log(ansi.ANSI.clearScreen);
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
-    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " Amiga AI Shell (v1.0) by Patu^Xenium      ")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " AMAI - Amiga AI Shell (v1.0) by Patu^Xenium       ")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "========================================================")));
     console.log(" Model:   " + ansi.info(cfg.model));
     console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port));
@@ -37,8 +37,11 @@ function startRepl(cfg) {
     console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/cd") + ", " + ansi.warn("/exit"));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "--------------------------------------------------------\n")));
 
-    var rl = readline.createInterface({ prompt: 'amiga-ai> ' });
-    var promptStr = ansi.bold(ansi.c(ansi.ANSI.green, "amiga-ai> "));
+    // Ensure any leftover bridge session from a previous run is aborted cleanly
+    try { network.sendAbort(cfg); } catch (ignore) {}
+
+    var rl = readline.createInterface({ prompt: '=> ' });
+    var promptStr = ansi.bold(ansi.c(ansi.ANSI.green, "=> "));
 
     function runAgentLoop(round, callbackDone) {
         if (round > maxAgentRounds) {
@@ -48,7 +51,7 @@ function startRepl(cfg) {
         }
 
         var tokenCount = 0;
-        process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "AI: ")));
+        process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")));
 
         var result = null;
         try {
@@ -211,8 +214,12 @@ function startRepl(cfg) {
                 var arg = parts.slice(1).join(' ').trim();
 
                 if (cmd === '/exit' || cmd === '/quit') {
-                    console.log("\n" + ansi.info("Goodbye from Amiga AI!"));
+                    console.log("\n" + ansi.info("Goodbye from AMAI!"));
+                    try { network.sendAbort(cfg); } catch (ignore) {}
                     try { rl.close(); } catch (ignore) {}
+                    if (typeof process.exit === 'function') {
+                        process.exit(0);
+                    }
                     return;
                 }
 
@@ -230,12 +237,13 @@ function startRepl(cfg) {
                     console.log("  " + ansi.info("/auto [on|off]") + "   - Quick toggle: AUTO mode vs SMART mode");
                     console.log("  " + ansi.info("/debug [on|off]") + "  - Toggle verbose debug logging");
                     console.log("  " + ansi.info("/clear") + "           - Clear conversation context");
-                    console.log("  " + ansi.info("/exit") + "            - Exit Amiga AI Shell\n");
+                    console.log("  " + ansi.info("/exit") + "            - Exit AMAI Shell\n");
                     promptLoop();
                     return;
                 }
 
                 if (cmd === '/clear') {
+                    try { network.sendAbort(cfg); } catch (ignore) {}
                     messages = [];
                     console.log(ansi.success("Conversation history cleared.\n"));
                     promptLoop();
@@ -347,8 +355,10 @@ function startRepl(cfg) {
                         console.log("  Model:   " + ansi.info(st.data.default_model));
                         console.log("  Ollama:  " + st.data.ollama);
                         console.log("  Models:  " + (st.data.models ? st.data.models.join(", ") : "none") + "\n");
-                    } else {
-                        console.log(ansi.error("[Failed to connect to " + cfg.host + ":" + cfg.port + "] " + st.error));
+                        console.log(ansi.error("[Failed to connect to " + cfg.host + ":" + cfg.port + "]"));
+                        if (st.error) {
+                            console.log(ansi.dim("Reason: " + st.error));
+                        }
                         
                         // If 127.0.0.1 failed, suggest or test LAN IP
                         var lanIp = "192.168.1.16";

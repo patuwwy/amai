@@ -1,5 +1,5 @@
 /**
- * Amiga AI Bridge - PC Node.js Server
+ * AMAI Bridge - PC Node.js Server
  * Bridges Amiga (NodeAmiga) to local Ollama instance (localhost:11434).
  * Supports streaming, heartbeat keepalive, charset transliteration (ASCII / AmigaPL / ISO-8859-2), and Amiga tools.
  */
@@ -14,6 +14,7 @@ const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'qwen3.8:latest';
 
 const LOG_FILE = path.join(__dirname, 'bridge.log');
+const SYSTEM_PROMPT_FILE = path.join(__dirname, 'system-prompt.md');
 
 function log(msg) {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -222,9 +223,16 @@ const AMIGA_TOOLS = [
 ];
 
 function getSystemPrompt(cwd) {
+    if (fs.existsSync(SYSTEM_PROMPT_FILE)) {
+        try {
+            return fs.readFileSync(SYSTEM_PROMPT_FILE, 'utf8').trim();
+        } catch (err) {
+            log(`[SystemPrompt ERROR] Failed to read ${SYSTEM_PROMPT_FILE}: ${err.message}`);
+        }
+    }
     const cwdLine = cwd ? `Current working directory on Amiga: "${cwd}".` : '';
-    return `You are Amiga AI, an intelligent coding assistant running on Commodore Amiga via NodeAmiga.
-You help the user program in C (SAS/C, VBCC, GCC), m68k Assembler, ARexx, Amiga E, or shell scripts.
+    return `You are AMAI (Amiga AI), an intelligent coding assistant running on Commodore Amiga, connected to external LLM.
+You help the user program in C (SAS/C, VBCC, GCC), m68k Assembler, ARexx, Amiga E, Amos, or shell scripts.
 You have tools to get the current working directory (get_cwd), read files, write files, patch files, list directories, and execute AmigaDOS commands.
 ${cwdLine}
 Rules:
@@ -239,7 +247,8 @@ Rules:
    - To inspect the current directory contents, invoke tool list_dir("") or run_command("dir").
 4. When using tools, invoke read_file first if you need to inspect existing code, then use write_file or patch_file to apply fixes.
 5. Keep explanations concise as screen space in Amiga Shell / CLI is limited (standard 640x256 or 640x512 PAL/NTSC).
-6. Output in plain ASCII text suitable for standard classic Amiga Topaz console. Do NOT use emojis, special unicode bullets, or fancy quotes.`;
+6. Output in plain ASCII text suitable for standard classic Amiga Topaz console. Do NOT use emojis, special unicode bullets, or fancy quotes.
+7. In polish, use Amiga, Amidze, Amigi `;
 }
 
 // Helper: Fetch available models from Ollama
@@ -257,6 +266,41 @@ async function getOllamaModels() {
         console.error('[Bridge] Error connecting to Ollama:', err.message);
         return [];
     }
+}
+
+// Active chat session state tracking
+let activeSession = null;
+
+function abortActiveSession(reason) {
+    if (!activeSession) return false;
+    log(`[Chat ABORT] Aborting active session: ${reason}`);
+    const s = activeSession;
+    activeSession = null;
+
+    if (s.heartbeatTimer) {
+        clearInterval(s.heartbeatTimer);
+        s.heartbeatTimer = null;
+    }
+
+    try {
+        if (s.abortController) {
+            s.abortController.abort();
+        }
+    } catch (e) {}
+
+    if (s.res && !s.res.writableEnded) {
+        try {
+            s.res.end();
+        } catch (e) {}
+    }
+
+    if (s.socket && !s.socket.destroyed) {
+        try {
+            s.socket.destroy();
+        } catch (e) {}
+    }
+
+    return true;
 }
 
 // Create HTTP Server
@@ -288,7 +332,7 @@ const server = http.createServer(async (req, res) => {
         const models = await getOllamaModels();
         const jsonBody = JSON.stringify({
             status: 'online',
-            service: 'Amiga AI Bridge',
+            service: 'AMAI Bridge',
             default_model: DEFAULT_MODEL,
             ollama: `${OLLAMA_HOST}:${OLLAMA_PORT}`,
             models: models.map(m => m.name)
@@ -308,6 +352,27 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/api/models') {
         const models = await getOllamaModels();
         const jsonBody = JSON.stringify({ models }, null, 2);
+        const byteLen = Buffer.byteLength(jsonBody, 'utf8');
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': byteLen,
+            'Connection': 'close'
+        });
+        res.end(jsonBody, () => {
+            if (res.socket) try { res.socket.end(); } catch (e) {}
+        });
+        return;
+    }
+
+    if (req.url === '/api/abort' || req.url === '/api/exit' || req.url === '/api/reset') {
+        const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
+        log(`[Session] Received ${req.url} (${req.method}) from ${clientIp}`);
+        const wasAborted = abortActiveSession(`Requested by Amiga via ${req.url}`);
+        const jsonBody = JSON.stringify({
+            status: 'ok',
+            aborted: wasAborted,
+            message: wasAborted ? 'Active session aborted' : 'No active session was running'
+        }, null, 2);
         const byteLen = Buffer.byteLength(jsonBody, 'utf8');
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
@@ -354,6 +419,21 @@ const server = http.createServer(async (req, res) => {
 
             log(`[Chat START] From: ${clientIp} | Model: ${model} | Msgs: ${messages.length} | CWD: "${cwd}" | Enc: ${encoding} | Prompt: ${userPreview}`);
 
+            // If another session was still active, abort it now
+            if (activeSession) {
+                log(`[Chat START] Existing session in progress; aborting before starting new chat.`);
+                abortActiveSession('Superceded by new chat request');
+            }
+
+            const abortController = new AbortController();
+            const session = {
+                abortController,
+                res,
+                socket: req.socket,
+                heartbeatTimer: null
+            };
+            activeSession = session;
+
             // Direct NDJSON line stream with Connection: close (no HTTP chunk framing to avoid Amiga parse issues)
             res.writeHead(200, {
                 'Content-Type': 'application/x-ndjson; charset=latin1',
@@ -362,6 +442,7 @@ const server = http.createServer(async (req, res) => {
             });
 
             const sendEvent = (obj) => {
+                if (res.writableEnded) return;
                 try {
                     const json = JSON.stringify(obj);
                     res.write(json + '\n');
@@ -380,15 +461,22 @@ const server = http.createServer(async (req, res) => {
                     lastActivityTime = Date.now();
                 }
             }, 2000);
+            session.heartbeatTimer = heartbeatTimer;
 
             let tokenCount = 0;
             let fullTextReceived = '';
 
-            res.on('close', () => {
-                if (!res.writableEnded) {
+            const onClientDisconnect = () => {
+                if (activeSession === session && !res.writableEnded) {
                     log(`[Chat CLIENT DISCONNECT] Amiga closed socket early! (Tokens sent: ${tokenCount})`);
+                    abortActiveSession('Amiga closed socket early');
                 }
-            });
+            };
+
+            res.on('close', onClientDisconnect);
+            if (req.socket) {
+                req.socket.on('close', onClientDisconnect);
+            }
 
             try {
                 const ollamaPayload = {
@@ -405,11 +493,13 @@ const server = http.createServer(async (req, res) => {
                 const ollamaResp = await fetch(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(ollamaPayload)
+                    body: JSON.stringify(ollamaPayload),
+                    signal: abortController.signal
                 });
 
                 if (!ollamaResp.ok) {
                     clearInterval(heartbeatTimer);
+                    session.heartbeatTimer = null;
                     const errorText = await ollamaResp.text();
                     log(`[Chat Ollama ERROR] Status: ${ollamaResp.status} | ${errorText}`);
                     sendEvent({ event: 'error', message: `Ollama error ${ollamaResp.status}: ${errorText}` });
@@ -491,15 +581,26 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 clearInterval(heartbeatTimer);
+                session.heartbeatTimer = null;
                 log(`[Chat FINISH] All tokens streamed (${tokenCount} tokens, ${fullTextReceived.length} chars). Calling res.end()...`);
                 res.end(() => {
                     log(`[Chat COMPLETE] Response closed and flushed to Amiga.`);
                 });
             } catch (err) {
                 clearInterval(heartbeatTimer);
-                log(`[Chat Exception] ${err.message}`);
-                sendEvent({ event: 'error', message: err.message });
-                res.end();
+                session.heartbeatTimer = null;
+                if (err.name === 'AbortError') {
+                    log(`[Chat Ollama] Request aborted.`);
+                } else {
+                    log(`[Chat Exception] ${err.message}`);
+                    sendEvent({ event: 'error', message: err.message });
+                    res.end();
+                }
+            } finally {
+                clearInterval(heartbeatTimer);
+                if (activeSession === session) {
+                    activeSession = null;
+                }
             }
         });
         return;
@@ -518,9 +619,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log('========================================================');
-    console.log(`   Amiga AI Bridge Server running on http://0.0.0.0:${PORT}`);
+    console.log(`   AMAI Bridge Server running on http://0.0.0.0:${PORT}`);
     console.log(`   Connected to Ollama on http://${OLLAMA_HOST}:${OLLAMA_PORT}`);
     console.log(`   Default Model: ${DEFAULT_MODEL}`);
+    console.log(`   System Prompt: ${fs.existsSync(SYSTEM_PROMPT_FILE) ? 'system-prompt.md' : 'default (internal)'}`);
     console.log('========================================================');
-    console.log('Ready to receive connections from WinUAE and real Amigas!\n');
+    console.log('Ready to receive connections from Real Amigas and WinUAE\n');
 });

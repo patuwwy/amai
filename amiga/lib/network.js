@@ -338,10 +338,47 @@ function getStatus(cfg) {
     }
 }
 
+/**
+ * Sends an abort/exit signal to the PC bridge to cancel any pending stream or session.
+ */
+function sendAbort(cfg) {
+    var host = (cfg && cfg.host) || '127.0.0.1';
+    var port = (cfg && cfg.port) || 11435;
+
+    debugLog(cfg, "sendAbort() notifying bridge at " + host + ":" + port + "...");
+
+    var sock = null;
+    try {
+        if (!net || typeof net.connect !== 'function') return false;
+
+        sock = net.connect(host, port, 1500);
+        if (!sock) return false;
+
+        var req = "POST /api/abort HTTP/1.0\r\n" +
+                  "Host: " + host + ":" + port + "\r\n" +
+                  "Content-Length: 0\r\n" +
+                  "Connection: close\r\n\r\n";
+
+        sock.write(req);
+        try { sock.readLine(); } catch (ignore) {}
+        try { sock.close(); } catch (ignore) {}
+        debugLog(cfg, "sendAbort() sent OK.");
+        return true;
+    } catch (e) {
+        if (sock) {
+            try { sock.close(); } catch (ignore) {}
+        }
+        debugLog(cfg, "sendAbort() error: " + errToStr(e));
+        return false;
+    }
+}
+
 module.exports = {
     testConnection: testConnection,
     sendChat: sendChat,
     getStatus: getStatus,
+    sendAbort: sendAbort,
+    sendExit: sendAbort,
     errToStr: errToStr,
     debugLog: debugLog
 };

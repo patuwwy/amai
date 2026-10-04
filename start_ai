@@ -1,8 +1,0 @@
-; Amiga AI Shell Launcher
-.key ARGS/F
-.bra {
-.ket }
-Failat 21
-DEV:
-cd amiga
-NodeAmiga ai.js {ARGS}

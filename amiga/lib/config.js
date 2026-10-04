@@ -30,9 +30,11 @@ function loadConfig(customFile) {
 
     var searchPaths = [
         customFile,
+        "amai.config.json",
+        "PROGDIR:amai.config.json",
+        "ENV:amai.config.json",
         "ai.json",
-        "PROGDIR:ai.json",
-        "ENV:ai.json"
+        "PROGDIR:ai.json"
     ];
 
     var i;

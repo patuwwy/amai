@@ -1,0 +1,39 @@
+; ========================================================
+; AMAI - Amiga AI Shell Standalone Compiler
+; ========================================================
+; Runs base NodeAmiga (works on any 68000+ CPU) to query
+; os.cpu() and propose the optimal compiler architecture:
+;   - NodeAmiga     (MC68000 / MC68010)
+;   - NodeAmiga_020 (MC68020 / MC68030)
+;   - NodeAmiga_040 (MC68040)
+;   - NodeAmiga_060 (MC68060)
+; ========================================================
+
+.key ARGS/F
+.bra {
+.ket }
+Failat 21
+
+; Ensure working directory is amiga/ if executed from parent
+If Not Exists amai.js
+    If Exists amiga/amai.js
+        cd amiga
+    EndIf
+EndIf
+
+; Run base NodeAmiga (universal 68000) to detect CPU and configure build
+If Exists NodeAmiga
+    NodeAmiga compile.js --from-script {ARGS$}
+Else
+    If Exists PROGDIR:NodeAmiga
+        PROGDIR:NodeAmiga compile.js --from-script {ARGS$}
+    Else
+        NodeAmiga compile.js --from-script {ARGS$}
+    EndIf
+EndIf
+
+; Execute the generated compilation batch command with maximum free RAM
+If Exists T:amai_compile_cmd
+    Execute T:amai_compile_cmd
+    Delete T:amai_compile_cmd QUIET
+EndIf
