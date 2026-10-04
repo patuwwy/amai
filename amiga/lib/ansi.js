@@ -29,7 +29,13 @@ var ANSI = {
     bgBlue: "\x1b[44m",
     bgMagenta: "\x1b[45m",
     bgCyan: "\x1b[46m",
-    bgWhite: "\x1b[47m"
+    bgWhite: "\x1b[47m",
+
+    // Cursor & Line control (Standard Amiga console.device supported)
+    clearLine: "\x1b[2K",
+    clearLineToEnd: "\x1b[K",
+    saveCursor: "\x1b7",
+    restoreCursor: "\x1b8"
 };
 
 function colorize(colorCode, text) {
@@ -44,5 +50,9 @@ module.exports = {
     warn: function(text) { return colorize(ANSI.yellow, text); },
     error: function(text) { return colorize(ANSI.red, text); },
     bold: function(text) { return colorize(ANSI.bold, text); },
-    dim: function(text) { return colorize(ANSI.dim, text); }
+    dim: function(text) { return colorize(ANSI.dim, text); },
+    clearLine: function() { return ANSI.clearLine; },
+    clearLineToEnd: function() { return ANSI.clearLineToEnd; },
+    cursorUp: function(n) { return "\x1b[" + (n || 1) + "A"; },
+    cursorDown: function(n) { return "\x1b[" + (n || 1) + "B"; }
 };

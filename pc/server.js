@@ -464,7 +464,40 @@ const server = http.createServer(async (req, res) => {
             session.heartbeatTimer = heartbeatTimer;
 
             let tokenCount = 0;
+            let thinkCount = 0;
             let fullTextReceived = '';
+            let inThinkTag = false;
+            let hadOllamaThinking = false;
+
+            const emitThinking = (raw) => {
+                thinkCount++;
+                const sanitized = sanitizeForAmiga(raw, encoding);
+                sendEvent({
+                    event: 'thinking',
+                    text: sanitized
+                });
+                if (thinkCount === 1 || thinkCount % 20 === 0) {
+                    log(`[Chat Thinking #${thinkCount}] "${sanitized.replace(/[\r\n\t]/g, ' ')}"`);
+                }
+            };
+
+            const emitThinkingDone = () => {
+                log(`[Chat Thinking DONE] Finished thinking (${thinkCount} chunks).`);
+                sendEvent({ event: 'thinking_done' });
+            };
+
+            const emitToken = (raw) => {
+                tokenCount++;
+                fullTextReceived += raw;
+                const sanitized = sanitizeForAmiga(raw, encoding);
+                sendEvent({
+                    event: 'token',
+                    text: sanitized
+                });
+                if (tokenCount <= 5 || tokenCount % 10 === 0) {
+                    log(`[Chat Token #${tokenCount}] "${sanitized.replace(/\n/g, '\\n')}"`);
+                }
+            };
 
             const onClientDisconnect = () => {
                 if (activeSession === session && !res.writableEnded) {
@@ -534,17 +567,41 @@ const server = http.createServer(async (req, res) => {
                             const chunk = JSON.parse(trimmed);
                             const msg = chunk.message;
                             if (msg) {
-                                if (msg.content) {
-                                    tokenCount++;
-                                    fullTextReceived += msg.content;
-                                    // Sanitize token for Amiga display
-                                    const sanitizedToken = sanitizeForAmiga(msg.content, encoding);
-                                    sendEvent({
-                                        event: 'token',
-                                        text: sanitizedToken
-                                    });
-                                    if (tokenCount <= 5 || tokenCount % 10 === 0) {
-                                        log(`[Chat Token #${tokenCount}] "${sanitizedToken.replace(/\n/g, '\\n')}"`);
+                                if (msg.thinking) {
+                                    hadOllamaThinking = true;
+                                    emitThinking(msg.thinking);
+                                } else {
+                                    if (hadOllamaThinking) {
+                                        emitThinkingDone();
+                                        hadOllamaThinking = false;
+                                    }
+
+                                    if (msg.content) {
+                                        let content = msg.content;
+                                        while (content.length > 0) {
+                                            if (!inThinkTag) {
+                                                const idx = content.indexOf('<think>');
+                                                if (idx !== -1) {
+                                                    if (idx > 0) emitToken(content.substring(0, idx));
+                                                    inThinkTag = true;
+                                                    content = content.substring(idx + 7);
+                                                } else {
+                                                    emitToken(content);
+                                                    content = '';
+                                                }
+                                            } else {
+                                                const idx = content.indexOf('</think>');
+                                                if (idx !== -1) {
+                                                    if (idx > 0) emitThinking(content.substring(0, idx));
+                                                    inThinkTag = false;
+                                                    emitThinkingDone();
+                                                    content = content.substring(idx + 8);
+                                                } else {
+                                                    emitThinking(content);
+                                                    content = '';
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -558,6 +615,12 @@ const server = http.createServer(async (req, res) => {
                             }
 
                             if (chunk.done) {
+                                if (hadOllamaThinking || inThinkTag) {
+                                    emitThinkingDone();
+                                    hadOllamaThinking = false;
+                                    inThinkTag = false;
+                                }
+
                                 log(`[Chat Ollama Done] reason: ${chunk.done_reason || 'stop'}, eval_count: ${chunk.eval_count}, duration: ${chunk.total_duration ? Math.round(chunk.total_duration/1e6) + 'ms' : '?'}`);
 
                                 if (accumulatedToolCalls.length > 0) {

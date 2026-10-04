@@ -222,6 +222,15 @@ function getByteLength(str) {
                 if (callbacks && typeof callbacks.onHeartbeat === 'function') {
                     try { callbacks.onHeartbeat(); } catch (e) {}
                 }
+            } else if (evt.event === 'thinking') {
+                var thinkText = (evt.text !== undefined && evt.text !== null) ? String(evt.text) : "";
+                if (callbacks && typeof callbacks.onThinking === 'function') {
+                    try { callbacks.onThinking(thinkText); } catch (e) {}
+                }
+            } else if (evt.event === 'thinking_done') {
+                if (callbacks && typeof callbacks.onThinkingDone === 'function') {
+                    try { callbacks.onThinkingDone(); } catch (e) {}
+                }
             } else if (evt.event === 'token') {
                 var tokenText = (evt.text !== undefined && evt.text !== null) ? String(evt.text) : "";
                 fullContent += tokenText;

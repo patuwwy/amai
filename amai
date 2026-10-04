@@ -1,5 +1,6 @@
 ; AMAI - Amiga AI Shell Launcher
 .key ARGS/F
+.def ARGS ""
 .bra {
 .ket }
 Failat 21

@@ -37,6 +37,7 @@ function loadConfig(customFile) {
         "PROGDIR:ai.json"
     ];
 
+    var configPath = null;
     var i;
     for (i = 0; i < searchPaths.length; i++) {
         var p = searchPaths[i];
@@ -49,12 +50,15 @@ function loadConfig(customFile) {
                         cfg[key] = parsed[key];
                     }
                 }
+                configPath = p;
                 break;
             } catch (e) {
                 // Ignore parse errors on secondary configs
             }
         }
     }
+
+    cfg._configPath = configPath || "amai.config.json";
 
     // Normalize approvalMode & autoExecute
     if (cfg.autoExecute === true && (!cfg.approvalMode || cfg.approvalMode === 'manual')) {
@@ -71,7 +75,33 @@ function loadConfig(customFile) {
     return cfg;
 }
 
+function saveConfig(cfg, targetFile) {
+    var p = targetFile || cfg._configPath || "amai.config.json";
+    var toSave = {
+        host: cfg.host || defaultConfig.host,
+        port: cfg.port || defaultConfig.port,
+        model: cfg.model || defaultConfig.model,
+        approvalMode: cfg.approvalMode || defaultConfig.approvalMode,
+        debug: !!cfg.debug,
+        encoding: cfg.encoding || defaultConfig.encoding,
+        timeout: cfg.timeout || defaultConfig.timeout
+    };
+
+    if (cfg.systemPrompt) {
+        toSave.systemPrompt = cfg.systemPrompt;
+    }
+
+    try {
+        fs.writeFileSync(p, JSON.stringify(toSave, null, 2) + "\n");
+        cfg._configPath = p;
+        return { success: true, path: p };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+}
+
 module.exports = {
     defaultConfig: defaultConfig,
-    loadConfig: loadConfig
+    loadConfig: loadConfig,
+    saveConfig: saveConfig
 };
