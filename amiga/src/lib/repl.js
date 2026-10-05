@@ -134,13 +134,14 @@ function getTerminalSize() {
 function startRepl(cfg) {
     var messages = [];
     var maxAgentRounds = 15;
-    
+    var bridgeAvailable = network.getStatus(cfg).success ? "OK" : "unavailable";
+
     process.stdout.write(ansi.ANSI.clearScreen);
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "==================================================")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " AMAI - Amiga AI Shell (v1.0) by Patu^Xenium   ")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "==================================================")));
     console.log(" Model:   " + ansi.info(cfg.model));
-    console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port));
+    console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port + " " + bridgeAvailable.toString()));
     var initialCwd = "";
     try { if (typeof process.cwd === 'function') initialCwd = process.cwd(); } catch(e) {}
     if (initialCwd) {
@@ -230,6 +231,8 @@ function startRepl(cfg) {
         process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) + ansi.dim("* Connecting..."));
 
         var result = null;
+        let thinking = "";
+
         try {
             result = network.sendChat(cfg, messages, {
                 onConnected: function(model) {
@@ -243,11 +246,13 @@ function startRepl(cfg) {
                 },
                 onThinking: function(text) {
                     isThinking = true;
+                    thinking = (thinking + text).substr(-32);
+
                     thinkCount++;
                     spinIdx = (spinIdx + 1) % SPINNER.length;
 
                     var line = "\r" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) +
-                               ansi.warn(SPINNER[spinIdx] + " Thinking (" + thinkCount + ")...") + "\x1b[K";
+                               ansi.warn(SPINNER[spinIdx] + " Thinking (" + thinkCount + ")...") + ansi.italic(thinking) + "\x1b[K";
                     process.stdout.write(line);
                 },
                 onThinkingDone: function() {
@@ -255,6 +260,7 @@ function startRepl(cfg) {
                         process.stdout.write("\r\x1b[K" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")));
                         isThinking = false;
                     }
+                    thinging = "";
                 },
                 onToken: function(text) {
                     if (isThinking || tokenCount === 0) {

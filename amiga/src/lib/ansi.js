@@ -50,6 +50,7 @@ module.exports = {
     warn: function(text) { return colorize(ANSI.yellow, text); },
     error: function(text) { return colorize(ANSI.red, text); },
     bold: function(text) { return colorize(ANSI.bold, text); },
+    italic: function(text) { return colorize(ANSI.italic, text)},
     dim: function(text) { return colorize(ANSI.dim, text); },
     clearLine: function() { return ANSI.clearLine; },
     clearLineToEnd: function() { return ANSI.clearLineToEnd; },
