@@ -219,6 +219,43 @@ const AMIGA_TOOLS = [
                 required: ['command']
             }
         }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'launch_workbench_app',
+            description: 'Launch a GUI / Workbench application in the background using WBRun (e.g. "SYS:Tools/Clock", "SYS:Utilities/Calculator", "SYS:Utilities/MultiView", "SYS:Prefs/ScreenMode"). Use this tool whenever the user asks to start, open, or run a GUI or Workbench program.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    app_path: {
+                        type: 'string',
+                        description: 'AmigaDOS path to the Workbench executable (e.g. "SYS:Tools/Clock", "SYS:Utilities/Calculator", "SYS:Prefs/Palette")'
+                    },
+                    args: {
+                        type: 'string',
+                        description: 'Optional arguments or files to open with the application (e.g. "S:Startup-Sequence" for MultiView)'
+                    }
+                },
+                required: ['app_path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'cpu',
+            description: 'Get CPU, FPU, MMU, and cache information about the Amiga system using the AmigaDOS "cpu" command (e.g. detect 68000, 68020, 68030, 68040, 68060, FPU presence, cache status).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    args: {
+                        type: 'string',
+                        description: 'Optional arguments for the cpu command (leave empty to query CPU/system specs)'
+                    }
+                }
+            }
+        }
     }
 ];
 
@@ -233,7 +270,7 @@ function getSystemPrompt(cwd) {
     const cwdLine = cwd ? `Current working directory on Amiga: "${cwd}".` : '';
     return `You are AMAI (Amiga AI), an intelligent coding assistant running on Commodore Amiga, connected to external LLM.
 You help the user program in C (SAS/C, VBCC, GCC), m68k Assembler, ARexx, Amiga E, Amos, or shell scripts.
-You have tools to get the current working directory (get_cwd), read files, write files, patch files, list directories, and execute AmigaDOS commands.
+You have tools to get the current working directory (get_cwd), read files, write files, patch files, list directories, execute AmigaDOS commands (run_command), launch Workbench/GUI applications (launch_workbench_app), and inspect CPU/system architecture (cpu).
 ${cwdLine}
 Rules:
 1. Keep Amiga architecture in mind (Motorola 680x0 CPU, Big-Endian, AmigaOS Exec/Intuition/Graphics/DOS libraries).
@@ -248,7 +285,20 @@ Rules:
 4. When using tools, invoke read_file first if you need to inspect existing code, then use write_file or patch_file to apply fixes.
 5. Keep explanations concise as screen space in Amiga Shell / CLI is limited (standard 640x256 or 640x512 PAL/NTSC).
 6. Output in plain ASCII text suitable for standard classic Amiga Topaz console. Do NOT use emojis, special unicode bullets, or fancy quotes.
-7. In polish, use Amiga, Amidze, Amigi `;
+7. In polish, use Amiga, Amidze, Amigi.
+8. GUI & Workbench Applications:
+   - Classic Amiga GUI applications (such as Clock, Calculator, MultiView, Prefs tools, Exchange) require Workbench startup and CANNOT be run directly via run_command.
+   - ALWAYS use launch_workbench_app to start GUI/Workbench applications. It uses the Amiga WBRun utility to launch them detached in Workbench mode.
+   - Common program locations:
+     * Clock: SYS:Tools/Clock or SYS:Utilities/Clock
+     * Calculator: SYS:Utilities/Calculator
+     * MultiView: SYS:Utilities/MultiView
+     * Commodities/Exchange: SYS:Tools/Commodities/Exchange
+     * Preferences: SYS:Prefs/<Name> (e.g. ScreenMode, Palette, Font, Input)
+   - When asked to run or open a GUI program (e.g. 'uruchom zegar', 'otwórz kalkulator'), invoke launch_workbench_app with its path.
+9. System & CPU Architecture:
+   - To inspect the Amiga processor, FPU, MMU, and cache configuration (e.g. 68000, 68020, 68030, 68040, 68060), use the "cpu" tool.
+   - Use this information to tailor compiler flags (e.g. -m68020, -m68040, -m68060) or advise on system capabilities.`;
 }
 
 // Helper: Fetch available models from Ollama
@@ -471,13 +521,13 @@ const server = http.createServer(async (req, res) => {
 
             const emitThinking = (raw) => {
                 thinkCount++;
-                const sanitized = sanitizeForAmiga(raw, encoding);
+                const sanitized = sanitizeForAmiga(raw, encoding).replace(/[\r\n\t]+/g, ' ');
                 sendEvent({
                     event: 'thinking',
                     text: sanitized
                 });
                 if (thinkCount === 1 || thinkCount % 20 === 0) {
-                    log(`[Chat Thinking #${thinkCount}] "${sanitized.replace(/[\r\n\t]/g, ' ')}"`);
+                    log(`[Chat Thinking #${thinkCount}] "${sanitized}"`);
                 }
             };
 

@@ -149,13 +149,148 @@ function runCommand(command) {
                 fs.unlinkSync(tmpOut);
             } catch (ignore) {}
         }
+
+        // AmigaDOS commands often return non-zero return codes (e.g. WARN 5) on informative queries (cpu, version, list).
+        // If output was generated and it does not indicate command failure, treat as success.
+        var trimmedErr = errOutput ? errOutput.trim() : "";
+        var isNotFound = trimmedErr.indexOf("Unknown command") !== -1 ||
+                         trimmedErr.indexOf("not found") !== -1 ||
+                         trimmedErr.indexOf("Cannot open") !== -1;
+        if (trimmedErr && !isNotFound) {
+            return {
+                success: true,
+                command: command,
+                output: errOutput
+            };
+        }
+
         return {
             success: false,
             command: command,
-            error: e.message,
+            error: e.message || "Command execution failed",
             output: errOutput
         };
     }
+}
+
+function launchWorkbenchApp(appPath, args) {
+    if (!appPath) {
+        return { success: false, error: "Missing application path" };
+    }
+
+    var cleanPath = String(appPath).trim().replace(/^["']|["']$/g, '');
+
+    // Strip .info extension if provided (WBRun expects the executable name)
+    if (cleanPath.toLowerCase().indexOf('.info') === cleanPath.length - 5) {
+        cleanPath = cleanPath.substring(0, cleanPath.length - 5);
+    }
+
+    // Try finding the executable if not directly found
+    if (!fs.existsSync(cleanPath)) {
+        // Extract filename without directories/volume: e.g. "SYS:Tools/Clock" -> "Clock"
+        var baseName = cleanPath;
+        var lastSlash = baseName.lastIndexOf('/');
+        var lastColon = baseName.lastIndexOf(':');
+        var cutIdx = Math.max(lastSlash, lastColon);
+        if (cutIdx !== -1) {
+            baseName = baseName.substring(cutIdx + 1);
+        }
+
+        var candidateDirs = [
+            "SYS:Utilities/",
+            "SYS:Tools/",
+            "SYS:Prefs/",
+            "SYS:Tools/Commodities/",
+            "SYS:System/",
+            "C:"
+        ];
+        var found = false;
+        for (var i = 0; i < candidateDirs.length; i++) {
+            var cand = candidateDirs[i] + baseName;
+            if (fs.existsSync(cand)) {
+                cleanPath = cand;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    // 1. Try launching via WBRun (WorkBench startup)
+    var cmd = 'WBRun "' + cleanPath + '"';
+    if (args && String(args).trim()) {
+        cmd += ' ' + String(args).trim();
+    }
+
+    var res = runCommand(cmd);
+    var output = (res.output || "").trim();
+
+    // 2. If WBRun failed or is missing, fallback to AmigaDOS 'Run >NIL: <NIL:'
+    if (!res.success || output.indexOf("Unknown command") !== -1 || output.indexOf("not found") !== -1) {
+        var fallbackCmd = 'Run >NIL: <NIL: "' + cleanPath + '"';
+        if (args && String(args).trim()) {
+            fallbackCmd += ' ' + String(args).trim();
+        }
+        var fbRes = runCommand(fallbackCmd);
+        if (fbRes.success) {
+            return {
+                success: true,
+                app: cleanPath,
+                command: fallbackCmd,
+                output: fbRes.output,
+                message: "Successfully launched application in background (via Run): " + cleanPath
+            };
+        }
+
+        return {
+            success: false,
+            app: cleanPath,
+            command: cmd,
+            output: output,
+            error: "Failed to launch '" + cleanPath + "'. Ensure WBRun is installed in C: (https://aminet.net/util/cli/WBRun.readme) or application supports CLI startup."
+        };
+    }
+
+    return {
+        success: true,
+        app: cleanPath,
+        command: cmd,
+        output: output,
+        message: "Successfully launched Workbench application in background: " + cleanPath
+    };
+}
+
+function getCpuInfo(args) {
+    var cmd = "cpu";
+    if (args && String(args).trim()) {
+        cmd += " " + String(args).trim();
+    }
+    var res = runCommand(cmd);
+    var output = (res.output || "").trim();
+
+    if (output && output.indexOf("Unknown command") === -1 && output.indexOf("not found") === -1) {
+        return {
+            success: true,
+            command: cmd,
+            output: output,
+            message: "Amiga CPU and system architecture information retrieved."
+        };
+    }
+
+    if (!res.success) {
+        return {
+            success: false,
+            command: cmd,
+            output: output,
+            error: res.error || "Failed to run 'cpu' command. Ensure C:CPU is present on your Amiga system."
+        };
+    }
+
+    return {
+        success: true,
+        command: cmd,
+        output: output,
+        message: "Amiga CPU and system architecture information retrieved."
+    };
 }
 
 // Dispatcher for incoming tool call objects
@@ -180,6 +315,10 @@ function executeTool(name, args) {
         return listDir(args.path);
     } else if (name === 'run_command') {
         return runCommand(args.command);
+    } else if (name === 'launch_workbench_app' || name === 'wbrun' || name === 'launch_app') {
+        return launchWorkbenchApp(args.app_path || args.path || args.app, args.args);
+    } else if (name === 'cpu' || name === 'get_cpu_info') {
+        return getCpuInfo(args ? args.args : null);
     } else {
         return { success: false, error: "Unknown tool: " + name };
     }
@@ -234,7 +373,7 @@ function assessRisk(name, args) {
         var cmdLower = cmd.toLowerCase();
 
         // Safe read-only commands
-        var safeCmds = ['cd', 'dir', 'list', 'avail', 'version', 'status', 'date', 'type', 'echo', 'info', 'which'];
+        var safeCmds = ['cd', 'dir', 'list', 'avail', 'version', 'status', 'date', 'type', 'echo', 'info', 'which', 'cpu'];
         for (var i = 0; i < safeCmds.length; i++) {
             var sc = safeCmds[i];
             if (cmdLower === sc || cmdLower.indexOf(sc + ' ') === 0 || cmdLower.indexOf(sc + '/') === 0) {
@@ -266,6 +405,30 @@ function assessRisk(name, args) {
         };
     }
 
+    if (name === 'launch_workbench_app' || name === 'wbrun' || name === 'launch_app') {
+        var app = (args && (args.app_path || args.path || args.app)) ? (args.app_path || args.path || args.app) : "application";
+        var appLower = String(app).toLowerCase();
+        var isCriticalApp = appLower.indexOf('format') !== -1 || appLower.indexOf('install') !== -1;
+        if (isCriticalApp) {
+            return {
+                dangerous: true,
+                riskLevel: "CRITICAL",
+                reason: "Critical application launch: " + app
+            };
+        }
+        return {
+            dangerous: false,
+            reason: "Launches Workbench GUI application: " + app
+        };
+    }
+
+    if (name === 'cpu' || name === 'get_cpu_info') {
+        return {
+            dangerous: false,
+            reason: "Read-only: queries Amiga CPU / architecture info"
+        };
+    }
+
     return { dangerous: true, riskLevel: "HIGH", reason: "Unknown tool: " + name };
 }
 
@@ -274,7 +437,10 @@ module.exports = {
     writeFile: writeFile,
     patchFile: patchFile,
     listDir: listDir,
+    getCwd: getCwd,
     runCommand: runCommand,
+    launchWorkbenchApp: launchWorkbenchApp,
+    getCpuInfo: getCpuInfo,
     executeTool: executeTool,
     assessRisk: assessRisk
 };

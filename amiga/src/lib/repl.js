@@ -228,46 +228,100 @@ function startRepl(cfg) {
         var isThinking = false;
         var SPINNER = ['|', '/', '-', '\\'];
         var spinIdx = 0;
+        var termCols = (lastKnownSize && lastKnownSize.cols) ? lastKnownSize.cols : 77;
+        var thinking = "";
+
+        function clearThinkingLine() {
+            if (!isThinking && lastLineLen === 0) return;
+            var spaces = "";
+            var width = Math.max(lastLineLen, 60);
+            for (var c = 0; c < width; c++) {
+                spaces += " ";
+            }
+            process.stdout.write("\r" + spaces + "\r");
+            isThinking = false;
+            thinking = "";
+            lastLineLen = 0;
+        }
 
         process.stdout.write(amaiPrompt + ansi.dim("* Connecting..."));
 
         var result = null;
-        let thinking = "";
 
         try {
             result = network.sendChat(cfg, messages, {
                 onConnected: function(model) {
-                    process.stdout.write("\r" + amaiPrompt + ansi.dim("* Connected...") + "\x1b[K");
+                    process.stdout.write("\r" + amaiPrompt + ansi.dim("* Connected...") + "          \r");
+                    lastLineLen = 25;
                 },
                 onHeartbeat: function() {
                     if (tokenCount === 0 && !isThinking) {
                         spinIdx = (spinIdx + 1) % SPINNER.length;
-                        process.stdout.write("\r" + amaiPrompt + ansi.dim(SPINNER[spinIdx] + " Thinking...") + "\x1b[K");
+                        process.stdout.write("\r" + amaiPrompt + ansi.dim(SPINNER[spinIdx] + " Thinking...") + "          \r");
+                        lastLineLen = 25;
                     }
                 },
                 onThinking: function(text) {
                     isThinking = true;
-                    thinking = (thinking + text).substr(-32);
-
                     thinkCount++;
                     spinIdx = (spinIdx + 1) % SPINNER.length;
 
-                    var line = "\r" + amaiPrompt +
-                               ansi.warn(SPINNER[spinIdx] + " Thinking (" + thinkCount + ")...") + ansi.italic(thinking) + "\x1b[K";
-                    process.stdout.write(line);
+                    // Clean text chunk: replace control chars / newlines with space without using \x in regex
+                    var cleanChunk = "";
+                    if (text) {
+                        for (var ci = 0; ci < text.length; ci++) {
+                            var code = text.charCodeAt(ci);
+                            if (code < 32) {
+                                cleanChunk += " ";
+                            } else {
+                                cleanChunk += text.charAt(ci);
+                            }
+                        }
+                    }
+                    if (cleanChunk) {
+                        cleanChunk = cleanChunk.replace(/  +/g, ' ');
+                        thinking = (thinking + cleanChunk).replace(/  +/g, ' ');
+                    }
+
+                    var prefix = SPINNER[spinIdx] + " Thinking (" + thinkCount + ")... ";
+                    var prefixVisibleLen = 6 + prefix.length; // 6 for "amai: "
+
+                    // Keep total line safely within window bounds (never wraps)
+                    var maxLineWidth = Math.max(30, Math.min(termCols - 4, 70));
+                    var maxSnippetLen = Math.max(8, maxLineWidth - prefixVisibleLen);
+
+                    var snippet = "";
+                    if (thinking.length > maxSnippetLen) {
+                        snippet = thinking.substring(thinking.length - maxSnippetLen);
+                    } else {
+                        snippet = thinking;
+                    }
+
+                    var currentVisibleLen = prefixVisibleLen + snippet.length;
+
+                    // Pad with spaces up to maxLineWidth to wipe any leftover characters from previous prints
+                    // Standard Amiga CON: does not support \x1b[K, so spaces are required for clean erasing
+                    var pad = "";
+                    var fullWidth = Math.max(lastLineLen, maxLineWidth);
+                    if (fullWidth > currentVisibleLen) {
+                        for (var p = 0; p < (fullWidth - currentVisibleLen); p++) {
+                            pad += " ";
+                        }
+                    }
+                    lastLineLen = Math.max(currentVisibleLen, fullWidth);
+
+                    // Print in-place: \r + prompt + prefix + snippet + pad
+                    process.stdout.write("\r" + amaiPrompt + ansi.warn(prefix) + snippet + pad);
                 },
                 onThinkingDone: function() {
                     if (isThinking) {
-                        process.stdout.write("\r\x1b[K" + amaiPrompt);
-                        isThinking = false;
-                        thinking = "";
+                        clearThinkingLine();
                     }
                 },
                 onToken: function(text) {
                     if (isThinking || tokenCount === 0) {
-                        process.stdout.write("\r\x1b[K" + amaiPrompt);
-                        isThinking = false;
-                        thinking = "";
+                        clearThinkingLine();
+                        process.stdout.write(amaiPrompt);
                     }
                     tokenCount++;
                     process.stdout.write(text);
@@ -275,17 +329,13 @@ function startRepl(cfg) {
                 onToolCalls: function(calls) {},
                 onDone: function(stats) {
                     if (isThinking) {
-                        process.stdout.write("\r\x1b[K");
-                        isThinking = false;
-                        thinking = "";
+                        clearThinkingLine();
                     }
                     console.log(""); // Trailing newline
                 },
                 onError: function(err) {
                     if (isThinking) {
-                        process.stdout.write("\r\x1b[K");
-                        isThinking = false;
-                        thinking = "";
+                        clearThinkingLine();
                     }
 
                     console.log("\n" + ansi.error("[Connection Error] " + err));

@@ -200,10 +200,12 @@ AMAI equips the LLM with a suite of tools tailored for AmigaOS development:
 4. **`list_dir(path)`** – Inspect directories and volume contents.
 5. **`get_cwd()`** – Retrieve current working directory path.
 6. **`run_command(command)`** – Execute arbitrary AmigaDOS shell commands via `child_process.execSync` (e.g. `vc -c file.c`).
+7. **`launch_workbench_app(app_path, [args])`** – Launch GUI/Workbench applications in the background using `WBRun` (e.g. `SYS:Tools/Clock`, `SYS:Utilities/Calculator`). Requires [WBRun](https://aminet.net/util/cli/WBRun.readme) installed in `C:`.
+8. **`cpu([args])`** – Query Amiga CPU, FPU, MMU, and cache configuration via AmigaDOS `cpu` command (e.g. 68000, 68020, 68030, 68040, 68060).
 
 ### Safety Approval Modes:
 
-- **`smart` (Default)**: Automatically approves safe read-only operations (`read_file`, `list_dir`, `get_cwd`), but prompts the user for confirmation `[Y/n]` before modifying files or executing shell commands.
+- **`smart` (Default)**: Automatically approves safe read-only operations (`read_file`, `list_dir`, `get_cwd`, `cpu`, safe GUI launches), but prompts the user for confirmation `[Y/n]` before modifying files or executing shell commands.
 - **`manual`**: Prompts the user before every single tool invocation.
 - **`auto`**: Fully autonomous mode; executes all tool actions without prompting (recommended for trusted scripts).
 
