@@ -8,6 +8,7 @@
  *
  * Standalone executable:
  *   NodeAmiga -compile amai amai.js
+ *   # or use specific NodeAmiga_020/40/60
  *   amai
  */
 
@@ -101,7 +102,7 @@ function main() {
         var queryText = opts.query.join(' ');
         var messages = [{ role: 'user', content: queryText }];
 
-        process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "AI: ")));
+        process.stdout.write(repl.prompt);
         network.sendChat(cfg, messages, {
             onToken: function(t) { process.stdout.write(t); },
             onDone: function() {

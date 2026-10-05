@@ -1,9 +1,10 @@
-NodeAmiga/
 *.tmp
-node_modules/
 *.log
-amiga/amai
-amiga/bin/amai
-bin/amai
-__pycache__/
 *.pyc
+*.png
+
+node_modules/
+amiga/bin/*
+
+__pycache__/
+dev

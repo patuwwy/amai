@@ -3,6 +3,8 @@
  * Executes file inspection, editing, and AmigaDOS commands on the Amiga.
  */
 
+var MAX_READ_SIZE = 16 * 1024;
+
 var fs = require('fs');
 var child_process = null;
 try {
@@ -17,10 +19,10 @@ function readFile(path) {
     }
     try {
         var content = fs.readFileSync(path, 'utf8');
-        var maxLen = 16384;
+        var maxLen = MAX_READ_SIZE;
         var truncated = false;
         if (content.length > maxLen) {
-            content = content.substring(0, maxLen) + "\n... [TRUNCATED - File exceeds 16KB. NodeAmiga memory protection] ...";
+            content = content.substring(0, maxLen) + "\n... [TRUNCATED - File exceeds " + MAX_READ_SIZE + " bytes. NodeAmiga memory protection] ...";
             truncated = true;
         }
         return {

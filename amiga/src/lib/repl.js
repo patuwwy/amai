@@ -829,5 +829,6 @@ function startRepl(cfg) {
 }
 
 module.exports = {
-    startRepl: startRepl
+    startRepl: startRepl,
+    prompt: amaiPrompt
 };
