@@ -10,6 +10,7 @@ var network = require('./network');
 var config = require('./config');
 
 var lastKnownSize = { cols: 77, rows: 17 };
+var amaiPrompt = ansi.bold(ansi.c(ansi.ANSI.cyan, "amai: "));
 
 function getTerminalSize() {
     // 1. Standard Node.js / TTY properties
@@ -228,7 +229,7 @@ function startRepl(cfg) {
         var SPINNER = ['|', '/', '-', '\\'];
         var spinIdx = 0;
 
-        process.stdout.write(ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) + ansi.dim("* Connecting..."));
+        process.stdout.write(amaiPrompt + ansi.dim("* Connecting..."));
 
         var result = null;
         let thinking = "";
@@ -236,12 +237,12 @@ function startRepl(cfg) {
         try {
             result = network.sendChat(cfg, messages, {
                 onConnected: function(model) {
-                    process.stdout.write("\r" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) + ansi.dim("* Connected...") + "\x1b[K");
+                    process.stdout.write("\r" + amaiPrompt + ansi.dim("* Connected...") + "\x1b[K");
                 },
                 onHeartbeat: function() {
                     if (tokenCount === 0 && !isThinking) {
                         spinIdx = (spinIdx + 1) % SPINNER.length;
-                        process.stdout.write("\r" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) + ansi.dim(SPINNER[spinIdx] + " Thinking...") + "\x1b[K");
+                        process.stdout.write("\r" + amaiPrompt + ansi.dim(SPINNER[spinIdx] + " Thinking...") + "\x1b[K");
                     }
                 },
                 onThinking: function(text) {
@@ -251,21 +252,22 @@ function startRepl(cfg) {
                     thinkCount++;
                     spinIdx = (spinIdx + 1) % SPINNER.length;
 
-                    var line = "\r" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")) +
+                    var line = "\r" + amaiPrompt +
                                ansi.warn(SPINNER[spinIdx] + " Thinking (" + thinkCount + ")...") + ansi.italic(thinking) + "\x1b[K";
                     process.stdout.write(line);
                 },
                 onThinkingDone: function() {
                     if (isThinking) {
-                        process.stdout.write("\r\x1b[K" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")));
+                        process.stdout.write("\r\x1b[K" + amaiPrompt);
                         isThinking = false;
+                        thinking = "";
                     }
-                    thinging = "";
                 },
                 onToken: function(text) {
                     if (isThinking || tokenCount === 0) {
-                        process.stdout.write("\r\x1b[K" + ansi.bold(ansi.c(ansi.ANSI.cyan, "Amai: ")));
+                        process.stdout.write("\r\x1b[K" + amaiPrompt);
                         isThinking = false;
+                        thinking = "";
                     }
                     tokenCount++;
                     process.stdout.write(text);
@@ -275,6 +277,7 @@ function startRepl(cfg) {
                     if (isThinking) {
                         process.stdout.write("\r\x1b[K");
                         isThinking = false;
+                        thinking = "";
                     }
                     console.log(""); // Trailing newline
                 },
@@ -282,7 +285,9 @@ function startRepl(cfg) {
                     if (isThinking) {
                         process.stdout.write("\r\x1b[K");
                         isThinking = false;
+                        thinking = "";
                     }
+
                     console.log("\n" + ansi.error("[Connection Error] " + err));
                     console.log(ansi.dim("Tip: If running in WinUAE, make sure 'bsdsocket.library' is enabled,"));
                     console.log(ansi.dim("or try switching host to your PC IP with: /host 192.168.1.16"));
@@ -325,18 +330,18 @@ function startRepl(cfg) {
                     try { toolArgs = JSON.parse(toolArgs); } catch (e) {}
                 }
 
-                console.log(ansi.warn("\n[Tool Proposal] ") + ansi.bold(toolName));
-                console.log(ansi.dim("Arguments: " + JSON.stringify(toolArgs)));
+                console.log(
+                    ansi.warn("\n[Tool Proposal] ") + ansi.bold(toolName) +
+                    ansi.dim(" args: " + JSON.stringify(toolArgs))
+                );
 
                 function executeAndContinue() {
-                    console.log(ansi.info("[Executing " + toolName + "...]"));
+                    process.stdout.write(ansi.warn("[Executing " + toolName + "...] "));
+                    
                     var toolResult = tools.executeTool(toolName, toolArgs);
 
                     if (toolResult.success) {
-                        console.log(ansi.success("[Tool OK] ") + (toolResult.message || (toolResult.count ? toolResult.count + " items" : "Done")));
-                        if (toolResult.output) {
-                            console.log(ansi.dim(toolResult.output));
-                        }
+                        process.stdout.write(ansi.dim("OK\n"))
                     } else {
                         console.log(ansi.error("[Tool Error] " + toolResult.error));
                     }
@@ -370,7 +375,7 @@ function startRepl(cfg) {
                     executeAndContinue();
                 } else if (mode === 'smart') {
                     if (!risk.dangerous) {
-                        console.log(ansi.success("[Smart-Approved: Safe read-only] ") + ansi.dim(risk.reason));
+                        console.log(ansi.warn("[Smart-Approved: Safe read-only] ") + ansi.dim(risk.reason));
                         executeAndContinue();
                     } else {
                         var badgeColor = risk.riskLevel === 'CRITICAL' ? ansi.ANSI.red :
