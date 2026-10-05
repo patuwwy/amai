@@ -28,10 +28,17 @@ python pc/winuae.py focus
 ```
 
 ### 2. Take a Screenshot & Inspect Screen
+> [!NOTE]
+> To save external cloud tokens and protect privacy, do NOT call `view_file` on screenshots. Instead, use the **`local-vision`** skill (`python pc/local_vision.py`):
+> ```powershell
+> python pc/local_vision.py inspect
+> python pc/local_vision.py read-cli
+> ```
+
+To capture a raw screenshot file without analysis:
 ```powershell
 python pc/winuae.py screenshot winuae_view.png
 ```
-After saving, use `view_file` on `winuae_view.png` to analyze what the Amiga is displaying.
 
 ### 3. Type Text into Shell / Prompt
 ```powershell
