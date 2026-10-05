@@ -223,6 +223,7 @@ function compileTarget(arch, outName, entryFile, isFromScript) {
         "    Delete " + outName + " QUIET\n" +
         "EndIf\n" +
         compileCmd + "\n" +
+        "Copy src/amai.config.json bin/amai.config.json\n" +
         "Echo \"\"\n" +
         "Echo \"Compilation complete! Standalone executable saved to: " + outName + "\"\n";
 
