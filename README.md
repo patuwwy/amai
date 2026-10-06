@@ -110,11 +110,16 @@ The bridge transparently handles:
 ## Compiling from sources
 
 1. Download NodeAmiga from https://juen.in/ or https://aminet.net/package/dev/lang/NodeAmiga. Unpack and get binaries in PATH
-2. Compile
+2. Compile directly on Amiga:
    ```amiga
    cd amai
    NodeAmiga -compile amiga/bin/amai amiga/src/amai.js
    ```
+3. Or build standalone binaries (68000, 68020, 68040, 68060) and `.lha` archive using the cross-builder:
+   ```bash
+   python tools/build_amiga.py --version v1.0.0
+   ```
+   *(This script automatically fetches NodeAmiga from Aminet if not present and packages standalone Amiga executables and `.lha` for GitHub Releases)*.
 
 ## 4. Built-in Slash Commands & Persistent Config
 

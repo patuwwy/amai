@@ -8,3 +8,6 @@ amiga/bin/*
 
 __pycache__/
 dev
+dist/
+build/
+*.lha

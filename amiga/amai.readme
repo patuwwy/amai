@@ -1,0 +1,65 @@
+Short:        AI Assistant Shell for Commodore Amiga (Ollama Bridge)
+Author:       Patu^Xenium^AberrationCreations
+Uploader:     patuwwy@gmail.com
+Type:         comm/misc
+Version:      ${VERSION}
+Architecture: m68k-amigaos
+Requires:     AmigaOS 2.04+ (Kickstart 37+), bsdsocket.library, 2MB+ Fast RAM
+
+AMAI (Amiga AI) - Amiga AI Shell
+================================
+AMAI is an interactive AI coding and assistant Shell client for Commodore
+Amiga (in the style of Claude Code / Gemini CLI / Aider). It enables pair
+programming directly on AmigaOS (C, 680x0 ASM, ARexx, Amiga E, AmigaDOS),
+reading/writing files, patching code, and executing AmigaDOS commands with
+safety approval modes.
+
+Included Executables:
+---------------------
+This archive contains standalone self-contained executables created with
+the NodeAmiga compiler (-compile). They do NOT require NodeAmiga or external
+JS files to run:
+- amai       : Universal build for MC68000 / MC68010 (all Amiga models)
+- amai_020   : Optimized for MC68020 / MC68030 (A1200 / A3000 / 030 boards)
+- amai_040   : Optimized for MC68040 (A4000 / 040 accelerators)
+- amai_060   : Optimized for MC68060 (060 accelerators - maximum speed)
+
+Quick Start Guide:
+==================
+
+1. On your PC (Host Bridge):
+----------------------------
+AMAI communicates with local or remote AI models (Ollama, LM Studio, etc.)
+via a lightweight Node.js bridge server:
+a) Install Ollama (https://ollama.com) and pull your model:
+   ollama run qwen2.5:latest
+   (or qwen3.8:latest or other with tooiling)
+b) Run the bridge server in the amai project directory on your PC:
+   node pc/server.js
+   (or double-click start_bridge.bat on Windows)
+   The bridge will listen on port 11435 across your local network.
+
+2. On your Amiga:
+-----------------
+a) Ensure a TCP/IP stack is running (Roadshow, Miami, AmiTCP, ImpBox, or
+   WinUAE bsdsocket emulation) providing bsdsocket.library.
+b) Extract this archive to your preferred location (e.g. DH0:Tools/amai/).
+c) Edit amai.config.json to set your PC's IP address:
+   "host": "192.168.1.50"
+   (or in WinUAE use "127.0.0.1")
+d) Run AMAI from the AmigaDOS Shell:
+   amai
+   Or specify host and model on the command line:
+   amai -h 192.168.1.50 -m qwen3.8:latest
+
+During the interactive session, you can use built-in slash commands such
+as /help, /status, /host, /model, /mode, /encoding, /save, and /clear.
+
+About NodeAmiga Runtime:
+------------------------
+AMAI is developed and compiled using NodeAmiga, a JavaScript runtime
+environment and compiler for Classic AmigaOS:
+- Author: Juen / R3D + Appendix + Nah-Kolor
+- Documentation: http://juen.in/NodeAmiga/
+- Aminet package: https://aminet.net/package/dev/lang/NodeAmiga
+- Support: http://juen.in/support/

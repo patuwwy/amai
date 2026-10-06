@@ -1,0 +1,105 @@
+name: Build and Release AMAI (.lha)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-amiga-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build Amiga Binaries and Create .lha Release
+    runs-on: ubuntu-latest
+    env:
+      LHA_TAG: release-20211125
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies & lhasa
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential autoconf automake libtool lhasa
+
+      - name: Build and install LHa for UNIX
+        run: |
+          set -e
+          git clone -q --depth 1 --branch "$LHA_TAG" \
+            https://github.com/jca02266/lha.git /tmp/lha
+          cd /tmp/lha
+          autoreconf -is
+          ./configure
+          make -j"$(nproc)"
+          sudo install -m 0755 src/lha /usr/local/bin/lha
+          command -v lha
+          lha | head -n 6
+
+      - name: Determine Version Tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.ref_name }}" ]; then
+            echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION=v1.0.0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Standalone Amiga Binaries and Package .lha
+        run: |
+          python tools/build_amiga.py \
+            --version "${{ steps.get_version.outputs.VERSION }}" \
+            --output-lha "amai-${{ steps.get_version.outputs.VERSION }}.lha"
+
+      - name: Upload Build Artifact (.lha)
+        uses: actions/upload-artifact@v4
+        with:
+          name: amai-${{ steps.get_version.outputs.VERSION }}-lha
+          path: amai-${{ steps.get_version.outputs.VERSION }}.lha
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: AMAI ${{ steps.get_version.outputs.VERSION }} - Amiga AI Assistant
+          files: |
+            amai-${{ steps.get_version.outputs.VERSION }}.lha
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ### AMAI - Amiga AI Shell Release (${{ steps.get_version.outputs.VERSION }})
+
+            Automated build for Commodore Amiga (AmigaOS 2.04+).
+            Packaged as standard Amiga `.lha` archive containing standalone binaries powered by the [NodeAmiga](https://aminet.net/package/dev/lang/NodeAmiga) runtime.
+
+            #### Included in `amai-${{ steps.get_version.outputs.VERSION }}.lha`:
+            - `amai` - Standalone executable (Universal MC68000 / MC68010)
+            - `amai_020` - Optimized for MC68020 / MC68030 (A1200 / A3000)
+            - `amai_040` - Optimized for MC68040 (A4000)
+            - `amai_060` - Optimized for MC68060 (Accelerator boards)
+            - `amai.config.json` - Default configuration
+            - `amai.readme` - Aminet-compliant readme
+            - `README.md` - Documentation and setup instructions
+
