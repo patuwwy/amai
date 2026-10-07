@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.0.0)'
-        required: false
-        default: 'v1.0.0'
+        description: 'Release version tag (e.g. v0.0.2 - required)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -56,12 +56,18 @@ jobs:
       - name: Determine Version Tag
         id: get_version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ github.ref_name }}" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            if [ -z "$VERSION" ]; then
+              echo "::error::Release version was not specified in workflow dispatch!"
+              exit 1
+            fi
+            echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.ref_name }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
             echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=v1.0.0" >> "$GITHUB_OUTPUT"
+            echo "::error::Release workflow triggered without a valid git tag or version input!"
+            exit 1
           fi
 
       - name: Build Standalone Amiga Binaries and Package .lha

@@ -16,6 +16,7 @@ var config = require('./lib/config');
 var repl = require('./lib/repl');
 var network = require('./lib/network');
 var ansi = require('./lib/ansi');
+var version = require('./lib/version');
 
 function parseArgs() {
     var args = process.argv.slice(2);
@@ -47,10 +48,10 @@ function parseArgs() {
         } else if (arg === '-c' || arg === '--config') {
             options.configFile = args[++i];
         } else if (arg === '-v' || arg === '--version') {
-            console.log("AMAI - Amiga AI Shell v1.0.0 (NodeAmiga runtime)");
+            console.log("AMAI - Amiga AI Shell " + version + " (NodeAmiga runtime)");
             process.exit(0);
         } else if (arg === '--help') {
-            console.log("AMAI - Amiga AI Shell v1.0.0");
+            console.log("AMAI - Amiga AI Shell " + version);
             console.log("Usage: NodeAmiga amai.js [options] [query]");
             console.log("Options:");
             console.log("  -h, --host <ip>       Bridge server IP (default: 127.0.0.1)");

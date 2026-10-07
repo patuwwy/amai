@@ -30,3 +30,8 @@ When debugging or testing changes on the Amiga, you can execute commands in WinU
 > - Inspect screen: `python pc/local_vision.py inspect "<prompt>"`
 > - Check errors / Guru: `python pc/local_vision.py check-error`
 > - Autonomous actions: `python pc/local_vision.py agent "<goal>"`
+
+## Documentation & Changelog Language
+> [!IMPORTANT]
+> **English Only for Project Documentation**:
+> All entries in `CHANGELOG.md`, `README.md`, `amai.readme`, and GitHub Release notes **MUST ALWAYS** be written in **English**. Even when interacting with the user in Polish, generate and maintain `CHANGELOG.md` exclusively in English.

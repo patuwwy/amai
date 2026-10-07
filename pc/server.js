@@ -8,6 +8,47 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Load environment variables if .env file exists
+let loadedEnvFile = null;
+const envPath = path.join(__dirname, '.env');
+const rootEnvPath = path.join(__dirname, '..', '.env');
+if (typeof process.loadEnvFile === 'function') {
+    if (fs.existsSync(envPath)) {
+        process.loadEnvFile(envPath);
+        loadedEnvFile = envPath;
+    } else if (fs.existsSync(rootEnvPath)) {
+        process.loadEnvFile(rootEnvPath);
+        loadedEnvFile = rootEnvPath;
+    }
+}
+
+const { getProvider } = require('./providers');
+const { getAvailableModels, cleanModelName } = require('./providers/models');
+
+function maskKey(key) {
+    if (!key) return '';
+    if (key.length <= 8) return '****';
+    return key.substring(0, 4) + '...' + key.substring(key.length - 4);
+}
+
+function getConfiguredProviders() {
+    const list = [];
+    list.push(`Ollama (local)   -> http://${OLLAMA_HOST}:${OLLAMA_PORT}`);
+    if (process.env.GEMINI_API_KEY) {
+        list.push(`Google Gemini    -> configured (${maskKey(process.env.GEMINI_API_KEY)})`);
+    }
+    if (process.env.OPENAI_API_KEY) {
+        list.push(`OpenAI           -> configured (${maskKey(process.env.OPENAI_API_KEY)})`);
+    }
+    if (process.env.OPENROUTER_API_KEY) {
+        list.push(`OpenRouter       -> configured (${maskKey(process.env.OPENROUTER_API_KEY)})`);
+    }
+    if (process.env.LLM_BASE_URL) {
+        list.push(`Custom Base URL  -> ${process.env.LLM_BASE_URL}`);
+    }
+    return list;
+}
+
 const PORT = process.env.BRIDGE_PORT || 11435;
 const OLLAMA_HOST = process.env.OLLAMA_HOST || '127.0.0.1';
 const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
@@ -301,23 +342,6 @@ Rules:
    - Use this information to tailor compiler flags (e.g. -m68020, -m68040, -m68060) or advise on system capabilities.`;
 }
 
-// Helper: Fetch available models from Ollama
-async function getOllamaModels() {
-    try {
-        const resp = await fetch(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/tags`);
-        if (!resp.ok) return [];
-        const data = await resp.json();
-        return (data.models || []).map(m => ({
-            name: m.name,
-            size: m.size,
-            modified: m.modified_at
-        }));
-    } catch (err) {
-        console.error('[Bridge] Error connecting to Ollama:', err.message);
-        return [];
-    }
-}
-
 // Active chat session state tracking
 let activeSession = null;
 
@@ -379,13 +403,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && (req.url === '/' || req.url === '/api/status')) {
         const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
         log(`[Status] Health check from ${clientIp}`);
-        const models = await getOllamaModels();
+        const models = await getAvailableModels();
+        const matchedDefault = models.find(m => m.id === cleanModelName(DEFAULT_MODEL) || m.displayName === DEFAULT_MODEL);
+        const defaultModelDisplay = matchedDefault ? matchedDefault.displayName : DEFAULT_MODEL;
         const jsonBody = JSON.stringify({
             status: 'online',
             service: 'AMAI Bridge',
-            default_model: DEFAULT_MODEL,
+            default_model: defaultModelDisplay,
             ollama: `${OLLAMA_HOST}:${OLLAMA_PORT}`,
-            models: models.map(m => m.name)
+            models: models.map(m => m.displayName)
         }, null, 2);
         const byteLen = Buffer.byteLength(jsonBody, 'utf8');
         res.writeHead(200, {
@@ -400,8 +426,16 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && req.url === '/api/models') {
-        const models = await getOllamaModels();
-        const jsonBody = JSON.stringify({ models }, null, 2);
+        const models = await getAvailableModels();
+        const jsonBody = JSON.stringify({
+            models: models.map(m => ({
+                name: m.displayName,
+                id: m.id,
+                provider: m.provider,
+                size: m.size,
+                modified: m.modified
+            }))
+        }, null, 2);
         const byteLen = Buffer.byteLength(jsonBody, 'utf8');
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
@@ -462,7 +496,8 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            const model = requestData.model || DEFAULT_MODEL;
+            const rawModel = requestData.model || DEFAULT_MODEL;
+            const model = cleanModelName(rawModel);
             const messages = requestData.messages || [];
             const enableTools = requestData.enable_tools !== false;
             const cwd = requestData.cwd || '';
@@ -570,144 +605,51 @@ const server = http.createServer(async (req, res) => {
             }
 
             try {
-                // Ensure at least one user query is present so Qwen template doesn't fail
+                // Ensure at least one user query is present so prompt templates don't fail
                 if (!messages.some(m => m.role === 'user')) {
                     messages.push({ role: 'user', content: 'Continue' });
                 }
 
-                const ollamaPayload = {
+                const provider = getProvider(model, process.env);
+                log(`[Chat Route] Selected provider "${provider.name}" for model "${model}"`);
+
+                await provider.handleStream({
                     model: model,
                     messages: messages,
-                    stream: true,
-                    options: {
-                        num_ctx: 16384
-                    }
-                };
-
-                if (enableTools) {
-                    ollamaPayload.tools = AMIGA_TOOLS;
-                }
-
-                log(`[Chat Ollama] Connecting to Ollama on http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/chat...`);
-                const ollamaResp = await fetch(`http://${OLLAMA_HOST}:${OLLAMA_PORT}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(ollamaPayload),
-                    signal: abortController.signal
-                });
-
-                if (!ollamaResp.ok) {
-                    clearInterval(heartbeatTimer);
-                    session.heartbeatTimer = null;
-                    const errorText = await ollamaResp.text();
-                    log(`[Chat Ollama ERROR] Status: ${ollamaResp.status} | ${errorText}`);
-                    sendEvent({ event: 'error', message: `Ollama error ${ollamaResp.status}: ${errorText}` });
-                    res.end();
-                    return;
-                }
-
-                log(`[Chat Ollama OK] Stream opened from Ollama. Reading chunks...`);
-
-                const reader = ollamaResp.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let buffer = '';
-                let accumulatedToolCalls = [];
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) {
-                        log(`[Chat Ollama EOF] reader.read() returned done=true`);
-                        break;
-                    }
-
-                    lastActivityTime = Date.now();
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop();
-
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!trimmed) continue;
-
-                        try {
-                            const chunk = JSON.parse(trimmed);
-                            const msg = chunk.message;
-                            if (msg) {
-                                if (msg.thinking) {
-                                    hadOllamaThinking = true;
-                                    emitThinking(msg.thinking);
-                                } else {
-                                    if (hadOllamaThinking) {
-                                        emitThinkingDone();
-                                        hadOllamaThinking = false;
-                                    }
-
-                                    if (msg.content) {
-                                        let content = msg.content;
-                                        while (content.length > 0) {
-                                            if (!inThinkTag) {
-                                                const idx = content.indexOf('<think>');
-                                                if (idx !== -1) {
-                                                    if (idx > 0) emitToken(content.substring(0, idx));
-                                                    inThinkTag = true;
-                                                    content = content.substring(idx + 7);
-                                                } else {
-                                                    emitToken(content);
-                                                    content = '';
-                                                }
-                                            } else {
-                                                const idx = content.indexOf('</think>');
-                                                if (idx !== -1) {
-                                                    if (idx > 0) emitThinking(content.substring(0, idx));
-                                                    inThinkTag = false;
-                                                    emitThinkingDone();
-                                                    content = content.substring(idx + 8);
-                                                } else {
-                                                    emitThinking(content);
-                                                    content = '';
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
-                                    for (const tc of msg.tool_calls) {
-                                        accumulatedToolCalls.push(tc);
-                                        const fnName = tc.function ? tc.function.name : (tc.name || 'unknown');
-                                        log(`[Chat Tool Call] ${fnName} args: ${JSON.stringify(tc.function ? tc.function.arguments : {})}`);
-                                    }
-                                }
-                            }
-
-                            if (chunk.done) {
-                                if (hadOllamaThinking || inThinkTag) {
-                                    emitThinkingDone();
-                                    hadOllamaThinking = false;
-                                    inThinkTag = false;
-                                }
-
-                                log(`[Chat Ollama Done] reason: ${chunk.done_reason || 'stop'}, eval_count: ${chunk.eval_count}, duration: ${chunk.total_duration ? Math.round(chunk.total_duration/1e6) + 'ms' : '?'}`);
-
-                                if (accumulatedToolCalls.length > 0) {
-                                    log(`[Chat Sending tool_calls event] Count: ${accumulatedToolCalls.length}`);
-                                    sendEvent({
-                                        event: 'tool_calls',
-                                        calls: accumulatedToolCalls
-                                    });
-                                }
-
-                                sendEvent({
-                                    event: 'done',
-                                    total_duration: chunk.total_duration,
-                                    eval_count: chunk.eval_count
-                                });
-                            }
-                        } catch (err) {
-                            log(`[Chat Parse ERROR] Chunk parse failed: ${err.message} on line: ${trimmed.substring(0, 100)}`);
+                    enableTools: enableTools,
+                    tools: AMIGA_TOOLS,
+                    abortSignal: abortController.signal,
+                    env: process.env,
+                    callbacks: {
+                        onActivity: () => {
+                            lastActivityTime = Date.now();
+                        },
+                        emitThinking: (text) => {
+                            emitThinking(text);
+                        },
+                        emitThinkingDone: () => {
+                            emitThinkingDone();
+                        },
+                        emitToken: (text) => {
+                            emitToken(text);
+                        },
+                        emitToolCalls: (calls) => {
+                            log(`[Chat Sending tool_calls event] Count: ${calls.length}`);
+                            sendEvent({
+                                event: 'tool_calls',
+                                calls: calls
+                            });
+                        },
+                        emitDone: (stats) => {
+                            sendEvent({
+                                event: 'done',
+                                total_duration: stats ? stats.total_duration : 0,
+                                eval_count: stats ? stats.eval_count : tokenCount
+                            });
                         }
-                    }
-                }
+                    },
+                    log: log
+                });
 
                 clearInterval(heartbeatTimer);
                 session.heartbeatTimer = null;
@@ -721,7 +663,7 @@ const server = http.createServer(async (req, res) => {
                 clearInterval(heartbeatTimer);
                 session.heartbeatTimer = null;
                 if (err.name === 'AbortError') {
-                    log(`[Chat Ollama] Request aborted.`);
+                    log(`[Chat Stream] Request aborted.`);
                 } else {
                     log(`[Chat Exception] ${err.message}`);
                     sendEvent({ event: 'error', message: err.message });
@@ -803,12 +745,33 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
+    const envDisplay = loadedEnvFile
+        ? path.relative(path.join(__dirname, '..'), loadedEnvFile)
+        : 'none (using defaults)';
+
     console.log('========================================================');
     console.log(`   AMAI Bridge Server running on http://0.0.0.0:${PORT}`);
-    console.log(`   Connected to Ollama on http://${OLLAMA_HOST}:${OLLAMA_PORT}`);
+    console.log(`   Config File:   ${envDisplay}`);
     console.log(`   Default Model: ${DEFAULT_MODEL}`);
     console.log(`   System Prompt: ${fs.existsSync(SYSTEM_PROMPT_FILE) ? 'system-prompt.md' : 'default (internal)'}`);
+    console.log('   Configured Providers:');
+    const providers = getConfiguredProviders();
+    for (const p of providers) {
+        console.log(`     * ${p}`);
+    }
     console.log('========================================================');
+
+    try {
+        const models = await getAvailableModels();
+        if (models.length > 0) {
+            console.log(`Available Models (${models.length}):`);
+            for (const m of models) {
+                console.log(`  - ${m.displayName}`);
+            }
+            console.log('--------------------------------------------------------');
+        }
+    } catch (e) {}
+
     console.log('Ready to receive connections from Real Amigas and WinUAE\n');
 });

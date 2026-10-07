@@ -8,6 +8,7 @@ var ansi = require('./ansi');
 var tools = require('./tools');
 var network = require('./network');
 var config = require('./config');
+var version = require('./version');
 
 var lastKnownSize = { cols: 77, rows: 17 };
 var amaiPrompt = ansi.bold(ansi.c(ansi.ANSI.cyan, "amai: "));
@@ -140,7 +141,7 @@ function startRepl(cfg) {
     process.stdout.write(ansi.ANSI.clearScreen);
     console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "    _")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "   __\\     AMAI - Amiga AI Shell")));
-    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "  /___\\    v0.0.1 by Patu^Xenium")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "  /___\\    " + version + " by Patu^Xenium")));
     console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "---------------------------------- ")));
     
     
@@ -342,9 +343,13 @@ function startRepl(cfg) {
                         clearThinkingLine();
                     }
 
-                    console.log("\n" + ansi.error("[Connection Error] " + err));
-                    console.log(ansi.dim("Tip: If running in WinUAE, make sure 'bsdsocket.library' is enabled,"));
-                    console.log(ansi.dim("or try switching host to your PC IP with: /host 192.168.1.16"));
+                    if (err && (err.indexOf('API error') !== -1 || err.indexOf('Ollama error') !== -1 || err.indexOf('Quota') !== -1)) {
+                        console.log("\n" + ansi.error("[Model Error] " + err));
+                    } else {
+                        console.log("\n" + ansi.error("[Connection Error] " + err));
+                        console.log(ansi.dim("Tip: If running in WinUAE, make sure 'bsdsocket.library' is enabled,"));
+                        console.log(ansi.dim("or try switching host to your PC IP with: /host 192.168.1.16"));
+                    }
                 }
             });
         } catch (e) {
@@ -532,7 +537,7 @@ function startRepl(cfg) {
                     console.log("  " + ansi.info("/status") + "          - Check connection to PC bridge and Ollama");
                     console.log("  " + ansi.info("/host [ip[:port]]") + " - Change bridge host IP/port (auto-saved)");
                     console.log("  " + ansi.info("/port [port]") + "     - Set bridge port (auto-saved)");
-                    console.log("  " + ansi.info("/model [name]") + "    - Show or switch active model (auto-saved)");
+                    console.log("  " + ansi.info("/model [name|prov]") + " - Show/switch model, or filter by provider (auto-saved)");
                     console.log("  " + ansi.info("/mode [mode]") + "     - Set approval mode: smart, manual, auto (auto-saved)");
                     console.log("  " + ansi.info("/auto [on|off]") + "   - Quick toggle: AUTO mode vs SMART mode (auto-saved)");
                     console.log("  " + ansi.info("/encoding [mode]") + " - Set charset: ascii, amigapl, raw (auto-saved)");
@@ -786,23 +791,85 @@ function startRepl(cfg) {
                 }
 
                 if (cmd === '/model') {
+                    var st2 = network.getStatus(cfg);
+                    var available = (st2.success && st2.data.models) ? st2.data.models : [];
+
+                    // Check if arg is a filter keyword: 'list', 'local', 'google', 'openai', 'openrouter', 'all'
+                    var filterKeyword = null;
                     if (arg) {
-                        cfg.model = arg;
-                        console.log(ansi.success("Switched model to: " + cfg.model));
+                        var lowerArg = arg.toLowerCase();
+                        if (lowerArg === 'list' || lowerArg === 'all') {
+                            filterKeyword = 'all';
+                        } else if (lowerArg === 'local' || lowerArg === 'ollama') {
+                            filterKeyword = 'local';
+                        } else if (lowerArg === 'google' || lowerArg === 'gemini') {
+                            filterKeyword = 'google';
+                        } else if (lowerArg === 'openai' || lowerArg === 'gpt') {
+                            filterKeyword = 'openai';
+                        } else if (lowerArg === 'openrouter') {
+                            filterKeyword = 'openrouter';
+                        }
+                    }
+
+                    if (arg && !filterKeyword) {
+                        // Switching model: strip provider suffix if user entered e.g. "qwen3.8:latest (local)"
+                        var cleanTarget = arg.replace(/\s*\([^)]*\)\s*$/, '').trim();
+                        cfg.model = cleanTarget;
+                        console.log(ansi.success("Switched model to: ") + ansi.bold(cfg.model));
                         var sResModel = config.saveConfig(cfg);
                         if (sResModel.success) {
                             console.log(ansi.dim("Config saved to: " + sResModel.path + "\n"));
                         } else {
                             console.log("");
                         }
-                    } else {
-                        console.log("Current model: " + ansi.info(cfg.model));
-                        var st2 = network.getStatus(cfg);
-                        if (st2.success && st2.data.models) {
-                            console.log("Available on bridge: " + st2.data.models.join(", "));
-                        }
-                        console.log("Usage: /model <model_name>\n");
+                        promptLoop();
+                        return;
                     }
+
+                    // Display current model
+                    console.log("Current model: " + ansi.bold(ansi.info(cfg.model)));
+
+                    if (available.length > 0) {
+                        // Group models by provider
+                        var groups = {};
+                        for (var mi = 0; mi < available.length; mi++) {
+                            var rawName = available[mi];
+                            var prov = 'other';
+                            var match = rawName.match(/\(([^)]+)\)$/);
+                            if (match) {
+                                prov = match[1].toLowerCase();
+                            }
+                            if (!groups[prov]) groups[prov] = [];
+                            groups[prov].push(rawName.replace(/\s*\([^)]*\)$/, '').trim());
+                        }
+
+                        var provKeys = Object.keys(groups);
+                        var activeNorm = (cfg.model || '').toLowerCase();
+
+                        console.log(ansi.bold("\nAvailable Models:"));
+                        for (var pi = 0; pi < provKeys.length; pi++) {
+                            var pName = provKeys[pi];
+                            if (filterKeyword && filterKeyword !== 'all' && pName !== filterKeyword) {
+                                continue;
+                            }
+                            var header = "[" + pName.toUpperCase() + "]";
+                            console.log(ansi.warn(header));
+                            var pModels = groups[pName];
+                            for (var pmi = 0; pmi < pModels.length; pmi++) {
+                                var mId = pModels[pmi];
+                                var isActive = (mId.toLowerCase() === activeNorm);
+                                if (isActive) {
+                                    console.log("  * " + ansi.success(mId) + " " + ansi.dim("(active)"));
+                                } else {
+                                    console.log("    " + mId);
+                                }
+                            }
+                        }
+                    } else {
+                        console.log(ansi.dim("No models returned by bridge."));
+                    }
+
+                    console.log(ansi.dim("\nUsage: /model <name> | /model <local|google|openai|openrouter>\n"));
                     promptLoop();
                     return;
                 }

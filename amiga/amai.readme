@@ -1,4 +1,4 @@
-Short:        AI Assistant Shell for Commodore Amiga (Ollama Bridge)
+Short:        AI Assistant Shell for Commodore Amiga (Ollama & Cloud Bridge)
 Author:       Patu^Xenium^AberrationCreations
 Uploader:     patuwwy@gmail.com
 Type:         comm/misc
@@ -14,6 +14,10 @@ programming directly on AmigaOS (C, 680x0 ASM, ARexx, Amiga E, AmigaDOS),
 reading/writing files, patching code, and executing AmigaDOS commands with
 safety approval modes.
 
+It connects through a lightweight bridge server on your modern PC/Mac/Linux
+machine, allowing you to use local models (Ollama, LM Studio) or cloud AI
+providers (Google Gemini, OpenAI, OpenRouter) with full tool-calling support.
+
 Included Executables:
 ---------------------
 This archive contains standalone self-contained executables created with
@@ -27,17 +31,22 @@ JS files to run:
 Quick Start Guide:
 ==================
 
-1. On your PC (Host Bridge):
-----------------------------
-AMAI communicates with local or remote AI models (Ollama, LM Studio, etc.)
-via a lightweight Node.js bridge server:
-a) Install Ollama (https://ollama.com) and pull your model:
-   ollama run qwen2.5:latest
-   (or qwen3.8:latest or other with tooiling)
-b) Run the bridge server in the amai project directory on your PC:
+1. On your PC / Mac / Linux (Host Bridge):
+------------------------------------------
+AMAI communicates with AI models via a lightweight Node.js bridge server:
+a) Local models (Ollama):
+   - Install Ollama (https://ollama.com) and pull your model:
+     ollama run qwen2.5:latest (or qwen3.8:latest)
+b) Cloud models (Google Gemini / OpenAI / OpenRouter):
+   - Copy pc/.env.example to pc/.env and set your API keys:
+     GEMINI_API_KEY=your_gemini_api_key
+     OPENAI_API_KEY=your_openai_api_key
+     OPENROUTER_API_KEY=your_openrouter_api_key
+   - You can also configure DEFAULT_MODEL in pc/.env.
+c) Run the bridge server in the amai project directory on your PC:
    node pc/server.js
-   (or double-click start_bridge.bat on Windows)
-   The bridge will listen on port 11435 across your local network.
+   (or double-click start_bridge.bat on Windows, or ./start_bridge.sh on Linux/macOS)
+   The bridge will automatically log active providers and listen on port 11435.
 
 2. On your Amiga:
 -----------------
@@ -50,10 +59,11 @@ c) Edit amai.config.json to set your PC's IP address:
 d) Run AMAI from the AmigaDOS Shell:
    amai
    Or specify host and model on the command line:
-   amai -h 192.168.1.50 -m qwen3.8:latest
+   amai -h 192.168.1.50 -m gemini-flash-latest
 
 During the interactive session, you can use built-in slash commands such
 as /help, /status, /host, /model, /mode, /encoding, /save, and /clear.
+Use "/model" to list all available local and cloud models.
 
 About NodeAmiga Runtime:
 ------------------------
