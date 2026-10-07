@@ -116,13 +116,13 @@ const AMIGA_TOOLS = [
         type: 'function',
         function: {
             name: 'read_file',
-            description: 'Read the contents of a file on Amiga (e.g. RAM:test.c, DH0:src/main.c)',
+            description: 'Read the contents of a text file on Amiga (e.g. RAM:test.c, DH0:src/main.c). Only supports text files; cannot read binary files or .info icon files.',
             parameters: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'AmigaDOS path to file, e.g. RAM:hello.c or DH0:dev/file.c'
+                        description: 'AmigaDOS path to text file, e.g. RAM:hello.c or DH0:dev/file.c'
                     }
                 },
                 required: ['path']
@@ -437,10 +437,18 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && req.url === '/api/chat') {
         const clientIp = req.socket ? req.socket.remoteAddress : 'unknown';
+        const expectedLen = parseInt(req.headers['content-length'] || '0', 10);
         let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', async () => {
-            const expectedLen = req.headers['content-length'];
+        let handled = false;
+        let silenceTimer = null;
+        let timeoutTimer = null;
+
+        const processBody = async () => {
+            if (handled) return;
+            handled = true;
+            if (silenceTimer) clearTimeout(silenceTimer);
+            if (timeoutTimer) clearTimeout(timeoutTimer);
+
             let requestData;
             try {
                 requestData = JSON.parse(body);
@@ -562,10 +570,18 @@ const server = http.createServer(async (req, res) => {
             }
 
             try {
+                // Ensure at least one user query is present so Qwen template doesn't fail
+                if (!messages.some(m => m.role === 'user')) {
+                    messages.push({ role: 'user', content: 'Continue' });
+                }
+
                 const ollamaPayload = {
                     model: model,
                     messages: messages,
-                    stream: true
+                    stream: true,
+                    options: {
+                        num_ctx: 16384
+                    }
                 };
 
                 if (enableTools) {
@@ -698,6 +714,8 @@ const server = http.createServer(async (req, res) => {
                 log(`[Chat FINISH] All tokens streamed (${tokenCount} tokens, ${fullTextReceived.length} chars). Calling res.end()...`);
                 res.end(() => {
                     log(`[Chat COMPLETE] Response closed and flushed to Amiga.`);
+                    if (res.socket) try { res.socket.end(); } catch (e) {}
+                    if (req.socket) try { req.socket.end(); } catch (e) {}
                 });
             } catch (err) {
                 clearInterval(heartbeatTimer);
@@ -715,7 +733,62 @@ const server = http.createServer(async (req, res) => {
                     activeSession = null;
                 }
             }
+        };
+
+        req.on('data', chunk => {
+            body += chunk;
+            if (silenceTimer) clearTimeout(silenceTimer);
+
+            if (expectedLen > 0 && body.length >= expectedLen) {
+                processBody();
+            } else {
+                silenceTimer = setTimeout(() => {
+                    const trimmed = body.trim();
+                    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                        try {
+                            JSON.parse(trimmed);
+                            log(`[Chat WARN] Received valid JSON before Content-Length reached (${body.length}/${expectedLen}). Processing now.`);
+                            processBody();
+                        } catch (ignore) {}
+                    }
+                }, 800);
+            }
         });
+
+        req.on('end', () => {
+            processBody();
+        });
+
+        req.on('error', err => {
+            log(`[Chat ERROR] Request stream error from ${clientIp}: ${err.message}`);
+            if (silenceTimer) clearTimeout(silenceTimer);
+            if (timeoutTimer) clearTimeout(timeoutTimer);
+        });
+
+        req.socket.on('close', () => {
+            if (!handled && body.length > 0) {
+                const trimmed = body.trim();
+                if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                    try {
+                        JSON.parse(trimmed);
+                        log(`[Chat WARN] Socket closed by client before HTTP end; processing received body (${body.length}/${expectedLen}).`);
+                        processBody();
+                    } catch (ignore) {}
+                }
+            }
+        });
+
+        timeoutTimer = setTimeout(() => {
+            if (!handled) {
+                log(`[Chat TIMEOUT] Request body timed out from ${clientIp} (${body.length}/${expectedLen} bytes received)`);
+                handled = true;
+                if (!res.writableEnded) {
+                    res.writeHead(408, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Request body timeout' }));
+                }
+            }
+        }, 15000);
+
         return;
     }
 

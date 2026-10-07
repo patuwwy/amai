@@ -13,24 +13,68 @@ try {
     // Optional if child_process is unavailable
 }
 
+var BINARY_EXTENSIONS = [
+    '.info', '.exe', '.lha', '.lzx', '.zip', '.adf', '.dms',
+    '.library', '.device', '.dat', '.bin', '.iff', '.ilbm',
+    '.anim', '.mod', '.med', '.oct'
+];
+
+function isBinaryExtension(filePath) {
+    if (!filePath) return false;
+    var lower = String(filePath).toLowerCase();
+    for (var i = 0; i < BINARY_EXTENSIONS.length; i++) {
+        var ext = BINARY_EXTENSIONS[i];
+        if (lower.indexOf(ext) === lower.length - ext.length) {
+            return ext;
+        }
+    }
+    return null;
+}
+
 function readFile(path) {
+    if (!path) {
+        return { success: false, error: "Missing file path" };
+    }
+    var binExt = isBinaryExtension(path);
+    if (binExt) {
+        return {
+            success: false,
+            error: "File '" + path + "' is a binary file (" + binExt + "). read_file only supports text and source code files."
+        };
+    }
     if (!fs.existsSync(path)) {
         return { success: false, error: "File not found: " + path };
     }
     try {
         var content = fs.readFileSync(path, 'utf8');
+        if (content && content.indexOf('\0') !== -1) {
+            return {
+                success: false,
+                error: "File '" + path + "' contains binary data (null bytes). read_file only supports text files."
+            };
+        }
         var maxLen = MAX_READ_SIZE;
         var truncated = false;
         if (content.length > maxLen) {
             content = content.substring(0, maxLen) + "\n... [TRUNCATED - File exceeds " + MAX_READ_SIZE + " bytes. NodeAmiga memory protection] ...";
             truncated = true;
         }
+
+        // Sanitize control characters (preserve tab, newline, carriage return)
+        var cleanContent = "";
+        for (var ci = 0; ci < content.length; ci++) {
+            var code = content.charCodeAt(ci);
+            if (code >= 32 || code === 10 || code === 13 || code === 9) {
+                cleanContent += content.charAt(ci);
+            }
+        }
+
         return {
             success: true,
             path: path,
-            size: content.length,
+            size: cleanContent.length,
             truncated: truncated,
-            content: content
+            content: cleanContent
         };
     } catch (e) {
         return { success: false, error: "Read error: " + e.message };
@@ -84,10 +128,19 @@ function listDir(path) {
     }
     try {
         var entries = fs.readdirSync(path);
+        var maxEntries = 120;
+        var truncated = false;
+        var totalCount = entries.length;
+        if (entries.length > maxEntries) {
+            entries = entries.slice(0, maxEntries);
+            truncated = true;
+        }
         return {
             success: true,
             path: path,
             count: entries.length,
+            total: totalCount,
+            truncated: truncated,
             entries: entries
         };
     } catch (e) {

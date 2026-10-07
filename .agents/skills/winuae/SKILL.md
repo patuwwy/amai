@@ -1,12 +1,17 @@
 ---
 name: winuae
 description: >-
-  Control and inspect the WinUAE Commodore Amiga emulator on Windows.
+  Control and inspect the WinUAE Commodore Amiga emulator on Windows (WINDOWS ONLY).
   Use this skill whenever the user asks to interact with WinUAE, check what is on the Amiga screen,
   take screenshots, send keystrokes, execute AmigaDOS / Shell commands, or click with the mouse.
+  Do not use on Linux or macOS.
 ---
 
-# WinUAE Automation Skill
+# WinUAE Automation Skill (Windows Only)
+
+> [!WARNING]
+> **Windows Only**: This skill relies on the Win32 API (`user32.dll`, `gdi32.dll`) and requires the WinUAE emulator running on Windows.
+> On **Linux** and **macOS**, do NOT execute this skill or `pc/winuae.py`.
 
 This skill allows Antigravity to interact directly with an active WinUAE emulator session on Windows.
 

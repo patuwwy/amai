@@ -11,3 +11,5 @@ dev
 dist/
 build/
 *.lha
+
+!docs/**/*.png

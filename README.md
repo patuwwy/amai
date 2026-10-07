@@ -1,5 +1,7 @@
 # AMAI - Amiga AI Shell (CLI Agent for Commodore Amiga)
 
+![AMAI Shell in Action](docs/screenshots/start.png)
+
 An interactive AI coding assistant in the command-line interface (CLI / Shell) for Commodore Amiga (in the style of **Claude Code / Gemini CLI / Aider**), running directly on the Amiga within the **NodeAmiga** JavaScript runtime and communicating with a local **Ollama** instance on a host PC via a lightweight dedicated Node.js bridge.
 
 Enables interactive pair programming directly on AmigaOS (C, Motorola 680x0 Assembler, ARexx, Amiga E, AmigaDOS batch scripts):
@@ -39,7 +41,8 @@ amai/
 │           ├── network.js   # TCP socket streaming client with thinking & token events
 │           ├── repl.js      # Interactive REPL prompt, compact spinner, and agent loop
 │           └── tools.js     # Tool execution engine (read, write, patch, dir, cwd, shell)
-└── start_bridge.bat         # Single-click launcher for the PC bridge on Windows
+├── start_bridge.bat         # Single-click launcher for the PC bridge on Windows
+└── start_bridge.sh          # Launcher for Linux and macOS
 
 ```
 
@@ -47,18 +50,24 @@ amai/
 
 ## 1. Starting the Host PC Bridge
 
-1. Ensure Ollama is installed and running on your PC with your preferred model (e.g. `qwen2.5:latest` or `deepseek-r1:7b`):
+1. Ensure Ollama is installed and running on your host machine (Windows, Linux, or macOS) with your preferred model (e.g. `qwen2.5:latest` or `deepseek-r1:7b`):
    ```bash
    ollama run qwen2.5:latest
    ```
-2. Start the bridge server on the PC:
-   ```cmd
-   start_bridge.bat
-   ```
-   or via command line:
-   ```bash
-   node pc/server.js
-   ```
+2. Start the bridge server on the PC / Mac / Linux:
+   - **Windows:**
+     ```cmd
+     start_bridge.bat
+     ```
+   - **Linux / macOS:**
+     ```bash
+     chmod +x start_bridge.sh
+     ./start_bridge.sh
+     ```
+   - **Any OS (command line):**
+     ```bash
+     node pc/server.js
+     ```
    The bridge listens on port `11435` across all network interfaces (`0.0.0.0`):
    - For WinUAE: connects via `127.0.0.1:11435` (or host LAN IP)
    - For real Amiga hardware: connects to your PC's LAN IP address (e.g. `192.168.1.16:11435`)
@@ -119,7 +128,7 @@ The bridge transparently handles:
    ```bash
    python tools/build_amiga.py --version v1.0.0
    ```
-   *(This script automatically fetches NodeAmiga from Aminet if not present and packages standalone Amiga executables and `.lha` for GitHub Releases)*.
+   _(This script automatically fetches NodeAmiga from Aminet if not present and packages standalone Amiga executables and `.lha` for GitHub Releases)_.
 
 ## 4. Built-in Slash Commands & Persistent Config
 

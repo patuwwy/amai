@@ -1,7 +1,15 @@
 # AMAI Developer & Agent Guidelines
 
-## WinUAE Automation & Vision
-This workspace includes a tool for controlling the running Commodore Amiga emulator (**WinUAE**):
+## Platform Support & Operating Systems
+- **PC Bridge Server (`pc/server.js`, `start_bridge.sh`, `start_bridge.bat`)**:
+  - Fully cross-platform: works on **Windows, Linux, and macOS**.
+  - Requires only Node.js (18+) and a running Ollama instance.
+- **WinUAE Automation & Vision Tools (`pc/winuae.py`, `pc/local_vision.py`, `winuae` skill, `local-vision` skill)**:
+  - **WINDOWS ONLY**: Uses the Win32 API (`user32.dll`, `gdi32.dll`) to interact with the WinUAE window.
+  - On Linux and macOS, agents must **NOT** execute `winuae.py` or `local_vision.py` as they will fail. On Linux/macOS, interact with AMAI directly or test on real Amiga hardware / FS-UAE.
+
+## WinUAE Automation & Vision (Windows only)
+This workspace includes a tool for controlling the running Commodore Amiga emulator (**WinUAE**) on Windows:
 
 - Script: `python pc/winuae.py` (or through the `winuae` skill)
 - Capabilities:

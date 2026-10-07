@@ -21,6 +21,10 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
+if sys.platform != "win32":
+    print("Error: local_vision.py requires Windows (Win32 API) and the WinUAE emulator. It is not supported on Linux/macOS.", file=sys.stderr)
+    sys.exit(1)
+
 # Try importing Pillow for image processing / scaling
 try:
     from PIL import Image

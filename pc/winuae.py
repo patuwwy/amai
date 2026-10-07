@@ -9,6 +9,11 @@ import os
 import time
 import argparse
 import ctypes
+
+if sys.platform != "win32":
+    print("Error: winuae.py requires Windows (Win32 API) and the WinUAE emulator. It is not supported on Linux/macOS.", file=sys.stderr)
+    sys.exit(1)
+
 from ctypes import wintypes
 try:
     from PIL import Image

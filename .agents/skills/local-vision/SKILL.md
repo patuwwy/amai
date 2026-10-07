@@ -2,12 +2,17 @@
 name: local-vision
 description: >-
   Inspect WinUAE Amiga screens, perform OCR on AmigaDOS Shell/CLI, check for Guru Meditation errors,
-  and automate WinUAE actions using the local Ollama vision model (qwen3.8).
+  and automate WinUAE actions using the local Ollama vision model (qwen3.8) on Windows (WINDOWS ONLY).
   Use this skill whenever you need to check what is on the Amiga screen, verify command output,
   or let the local model control WinUAE, saving cloud tokens and keeping all vision processing local.
+  Do not use on Linux or macOS.
 ---
 
-# Local Vision & WinUAE Agent Skill (Ollama Qwen 3.8)
+# Local Vision & WinUAE Agent Skill (Windows Only)
+
+> [!WARNING]
+> **Windows Only**: This skill relies on `pc/winuae.py` and the WinUAE emulator on Windows.
+> On **Linux** and **macOS**, do NOT execute this skill or `pc/local_vision.py`.
 
 This skill controls screen analysis and automated interaction with the Commodore Amiga emulator (**WinUAE**) using a **locally running Ollama model** (`qwen3.8:latest`).
 

@@ -138,15 +138,19 @@ function startRepl(cfg) {
     var bridgeAvailable = network.getStatus(cfg).success ? "OK" : "unavailable";
 
     process.stdout.write(ansi.ANSI.clearScreen);
-    console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "==================================================")));
-    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, " AMAI - Amiga AI Shell (v1.0) by Patu^Xenium   ")));
-    console.log(ansi.bold(ansi.c(ansi.ANSI.cyan, "==================================================")));
-    console.log(" Model:   " + ansi.info(cfg.model));
-    console.log(" Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port + " " + bridgeAvailable.toString()));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "    _")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "   __\\     AMAI - Amiga AI Shell")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "  /___\\    v0.0.1 by Patu^Xenium")));
+    console.log(ansi.bold(ansi.c(ansi.ANSI.yellow, "---------------------------------- ")));
+    
+    
+    
+    console.log("  Model:   " + ansi.info(cfg.model));
+    console.log("  Bridge:  " + ansi.dim(cfg.host + ":" + cfg.port + " " + bridgeAvailable.toString()));
     var initialCwd = "";
     try { if (typeof process.cwd === 'function') initialCwd = process.cwd(); } catch(e) {}
     if (initialCwd) {
-        console.log(" Dir:     " + ansi.info(initialCwd));
+        console.log("  Dir:     " + ansi.info(initialCwd));
     }
     var curMode = (cfg.approvalMode || 'smart').toLowerCase();
     var modeBadge = ansi.success("SMART (prompts on dangerous actions)");
@@ -155,17 +159,17 @@ function startRepl(cfg) {
     } else if (curMode === 'manual') {
         modeBadge = ansi.dim("MANUAL (prompts on every tool)");
     }
-    console.log(" Safety:  " + modeBadge);
+    console.log("  Safety:  " + modeBadge);
     if (cfg.debug) {
-        console.log(" Debug:   " + ansi.warn("ENABLED (verbose logging)"));
+        console.log("  Debug:   " + ansi.warn("ENABLED (verbose logging)"));
     }
-    console.log(" Commands: " + ansi.warn("/help") + ", " + ansi.warn("/status") + ", " + ansi.warn("/cd") + ", " + ansi.warn("/exit"));
+    
 
     // Ensure any leftover bridge session from a previous run is aborted cleanly
     try { network.sendAbort(cfg); } catch (ignore) {}
 
     var rl = readline.createInterface({ prompt: '=> ' });
-    var promptStr = ansi.bold(ansi.c(ansi.ANSI.green, "=> "));
+    //var promptStr = ansi.bold(ansi.c(ansi.ANSI.green, "=> "));
 
     var isExiting = false;
     var consecutiveEmptyCount = 0;
@@ -216,6 +220,7 @@ function startRepl(cfg) {
         return hr + "\n" + modeBadge + cwdText + " " + ansi.bold(ansi.c(ansi.ANSI.green, "> "));
     }
 
+    var SPINNER = ['|', '/', '-', '\\'];
     function runAgentLoop(round, callbackDone) {
         if (round > maxAgentRounds) {
             console.log(ansi.warn("\n[AI] Reached maximum agent steps (" + maxAgentRounds + ")."));
@@ -226,7 +231,6 @@ function startRepl(cfg) {
         var tokenCount = 0;
         var thinkCount = 0;
         var isThinking = false;
-        var SPINNER = ['|', '/', '-', '\\'];
         var spinIdx = 0;
         var termCols = (lastKnownSize && lastKnownSize.cols) ? lastKnownSize.cols : 77;
         var thinking = "";
@@ -868,12 +872,12 @@ function startRepl(cfg) {
 
     // Anchor prompt to bottom of window at startup without scrolling banner
     var termSz = getTerminalSize();
-    var bannerLines = 7 + (initialCwd ? 1 : 0) + (cfg.debug ? 1 : 0);
+    var bannerLines = 8 + (initialCwd ? 1 : 0) + (cfg.debug ? 1 : 0);
     var linesDown = termSz.rows - bannerLines - 2;
     if (linesDown > 0) {
         process.stdout.write("\x1b[" + linesDown + "B");
     }
-
+    console.log("type " + ansi.warn("/help") + " for commands");
     // Start interactive prompt loop
     promptLoop();
 }
