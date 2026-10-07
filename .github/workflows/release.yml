@@ -10,6 +10,11 @@ on:
         description: 'Release version tag (e.g. v0.0.2 - required)'
         required: true
         type: string
+      upload_aminet:
+        description: 'Upload package to Aminet FTP (/new/amai.lha, /new/amai.readme)?'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -115,4 +120,36 @@ jobs:
             - `amai.config.json` - Default configuration
             - `amai.readme` - Aminet-compliant readme
             - `README.md` - Documentation and setup instructions
+
+      - name: Upload Package to Aminet FTP
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload_aminet == 'true'
+        env:
+          AMINET_USER: ${{ secrets.AMINET_USER || 'anonymous' }}
+          AMINET_PASSWORD: ${{ secrets.AMINET_EMAIL }}
+        run: |
+          python -c "
+          import ftplib, os, sys
+          user = os.environ.get('AMINET_USER', 'anonymous')
+          passwd = os.environ.get('AMINET_PASSWORD')
+          if not passwd:
+              print('::error::AMINET_EMAIL secret is not set in repository settings!')
+              sys.exit(1)
+
+          print(f'Connecting to Aminet FTP server (main.aminet.net) as {user}...')
+          try:
+              with ftplib.FTP('main.aminet.net', timeout=60) as ftp:
+                  ftp.login(user, passwd)
+                  print('Logged in successfully. Changing directory to /new...')
+                  ftp.cwd('new')
+                  print('Uploading amai.lha (BINARY)...')
+                  with open('dist_aminet/amai.lha', 'rb') as f:
+                      ftp.storbinary('STOR amai.lha', f)
+                  print('Uploading amai.readme (ASCII)...')
+                  with open('dist_aminet/amai.readme', 'rb') as f:
+                      ftp.storlines('STOR amai.readme', f)
+                  print('🎉 Successfully uploaded amai.lha and amai.readme to Aminet /new!')
+          except Exception as e:
+              print(f'::error::Failed to upload to Aminet FTP: {e}')
+              sys.exit(1)
+          "
 
