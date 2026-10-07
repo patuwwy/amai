@@ -1,6 +1,6 @@
 Short:        AI Assistant Shell for Commodore Amiga (Ollama & Cloud Bridge)
 Author:       Patu^Xenium^AberrationCreations
-Uploader:     patuwwy@gmail.com
+Uploader:     patuwwy gmail com
 Type:         dev/misc
 Version:      ${VERSION}
 Architecture: m68k-amigaos
@@ -19,6 +19,12 @@ Project Homepage & Source Code:
 GitHub Repository: https://github.com/patuwwy/amai
 Issue Tracker:     https://github.com/patuwwy/amai/issues
 Releases & Source: https://github.com/patuwwy/amai/releases
+
+Please Note (Early Development):
+--------------------------------
+This is an early development release. While core tool execution and
+pair-programming features are working, occasional quirks or edge-case
+issues may occur. Feedback and bug reports are welcome on GitHub!
 
 It connects through a lightweight bridge server on your modern PC/Mac/Linux
 machine, allowing you to use local models (Ollama, LM Studio) or cloud AI

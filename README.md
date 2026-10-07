@@ -15,6 +15,9 @@ Enables interactive pair programming directly on AmigaOS (C, Motorola 680x0 Asse
 - 🖥️ **WinUAE Automation & Vision** – Dedicated Python controller (`pc/winuae.py`) for AI agents with pixel-accurate screenshots, keystroke injection, and mouse automation
 - 📦 **Standalone Executable Compilation** – bundle into a single self-contained Amiga binary (`NodeAmiga -compile amai amai.js`) that runs independently without NodeAmiga or external libraries.
 
+> [!NOTE]
+> **Early Development Preview**: AMAI is currently in early, active development. While core features and tool calling are functional, you may encounter occasional quirks, connection hiccups, or edge-case bugs. Please report issues and feedback on the [GitHub Issue Tracker](https://github.com/patuwwy/amai/issues).
+
 ---
 
 ### Project Structure
