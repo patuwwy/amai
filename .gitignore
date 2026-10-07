@@ -12,6 +12,7 @@ amiga/bin/*
 __pycache__/
 dev
 dist/
+dist_aminet/
 build/
 *.lha
 

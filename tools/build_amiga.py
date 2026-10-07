@@ -289,16 +289,23 @@ def main():
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(readme_content)
 
-        print(f"\nDist directory prepared at: {dist_dir}")
+        # Prepare Aminet upload directory: dist_aminet/
+        aminet_dir = os.path.join(project_root, "dist_aminet")
+        os.makedirs(aminet_dir, exist_ok=True)
+        aminet_readme_path = os.path.join(aminet_dir, "amai.readme")
+        shutil.copyfile(readme_path, aminet_readme_path)
 
         # Pack into LHA archive
         lha_tool = shutil.which("lha")
         if lha_tool:
             create_lha_archive(lha_tool, dist_dir, args.output_lha)
-            # If output_lha has version suffix (e.g. amai-v0.1.0.lha), also provide clean amai.lha for Aminet
+            # Also create clean amai.lha inside dist_aminet/
+            aminet_lha_path = os.path.join(aminet_dir, "amai.lha")
+            shutil.copyfile(args.output_lha, aminet_lha_path)
+            # Convenience copy in root if needed
             if os.path.basename(args.output_lha) != "amai.lha":
                 shutil.copyfile(args.output_lha, "amai.lha")
-                print("Created Aminet package: amai.lha")
+            print(f"Aminet upload package ready in: {aminet_dir}/ (amai.lha, amai.readme)")
         else:
             print("Note: 'lha' tool not found on PATH. Skipped creating .lha (directory dist/amai ready).")
 

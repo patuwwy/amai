@@ -84,8 +84,8 @@ jobs:
           name: amai-${{ steps.get_version.outputs.VERSION }}-release
           path: |
             amai-${{ steps.get_version.outputs.VERSION }}.lha
-            amai.lha
-            amai.readme
+            dist_aminet/amai.lha
+            dist_aminet/amai.readme
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -96,8 +96,8 @@ jobs:
           name: AMAI ${{ steps.get_version.outputs.VERSION }} - Amiga AI Assistant
           files: |
             amai-${{ steps.get_version.outputs.VERSION }}.lha
-            amai.lha
-            amai.readme
+            dist_aminet/amai.lha
+            dist_aminet/amai.readme
           draft: false
           prerelease: false
           generate_release_notes: true
