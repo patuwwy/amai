@@ -295,8 +295,16 @@ def main():
         lha_tool = shutil.which("lha")
         if lha_tool:
             create_lha_archive(lha_tool, dist_dir, args.output_lha)
+            # If output_lha has version suffix (e.g. amai-v0.1.0.lha), also provide clean amai.lha for Aminet
+            if os.path.basename(args.output_lha) != "amai.lha":
+                shutil.copyfile(args.output_lha, "amai.lha")
+                print("Created Aminet package: amai.lha")
         else:
             print("Note: 'lha' tool not found on PATH. Skipped creating .lha (directory dist/amai ready).")
+
+        # Copy finalized amai.readme (with version stamped) next to the archive for Aminet upload
+        shutil.copyfile(readme_path, "amai.readme")
+        print("Exported stamped Aminet readme: amai.readme")
     finally:
         # Restore version.js if it was in git dev state
         if prev_version_content:

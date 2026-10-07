@@ -78,11 +78,14 @@ jobs:
             --version "${{ steps.get_version.outputs.VERSION }}" \
             --output-lha "amai-${{ steps.get_version.outputs.VERSION }}.lha"
 
-      - name: Upload Build Artifact (.lha)
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: amai-${{ steps.get_version.outputs.VERSION }}-lha
-          path: amai-${{ steps.get_version.outputs.VERSION }}.lha
+          name: amai-${{ steps.get_version.outputs.VERSION }}-release
+          path: |
+            amai-${{ steps.get_version.outputs.VERSION }}.lha
+            amai.lha
+            amai.readme
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -93,6 +96,8 @@ jobs:
           name: AMAI ${{ steps.get_version.outputs.VERSION }} - Amiga AI Assistant
           files: |
             amai-${{ steps.get_version.outputs.VERSION }}.lha
+            amai.lha
+            amai.readme
           draft: false
           prerelease: false
           generate_release_notes: true
