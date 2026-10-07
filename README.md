@@ -21,7 +21,6 @@ Enables interactive pair programming directly on AmigaOS (C, Motorola 680x0 Asse
 
 ```text
 amai/
-├── amai                     # Shortcut launcher for amiga/bin/amai
 ├── CHANGELOG.md             # Project version changelog (Keep a Changelog standard)
 ├── pc/                      # Host PC Bridge & Automation Tools
 │   ├── server.js            # HTTP/TCP streaming server connecting to Ollama & Cloud providers
@@ -119,18 +118,14 @@ The bridge automatically logs loaded configuration, active providers, and availa
    - **Host -> Hard drives**: mount the repository directory as a hard drive directory (e.g. Device: `DEV:`, Volume: `amai`).
    - **Host -> Game ports** _(Recommended for mouse automation)_: in _Mouse extra settings_, set **Mouse untrap mode** to **Magic mouse** (or enable **Install virtual mouse driver**).
 2. Boot your Amiga workbench in WinUAE and open a Shell window.
-3. Grant script execution permission (one-time setup):
+3. Start AMAI:
    ```amiga
-   Protect DEV:amai +s
+   cd DEV:amiga/bin
+   amai
    ```
-4. Start AMAI:
+   or directly with options:
    ```amiga
-   DEV:amai
-   ```
-   or launch directly from the `amiga/` directory:
-   ```amiga
-   cd DEV:amiga
-   bin/amai
+   DEV:amiga/bin/amai -h 127.0.0.1 -m gemini-flash-latest
    ```
 
 ---
