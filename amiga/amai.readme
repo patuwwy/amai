@@ -1,7 +1,7 @@
 Short:        AI Assistant Shell for Commodore Amiga (Ollama & Cloud Bridge)
 Author:       Patu^Xenium^AberrationCreations
 Uploader:     patuwwy@gmail.com
-Type:         comm/misc
+Type:         dev/misc
 Version:      ${VERSION}
 Architecture: m68k-amigaos
 Requires:     AmigaOS 2.04+ (Kickstart 37+), bsdsocket.library, 2MB+ Fast RAM
