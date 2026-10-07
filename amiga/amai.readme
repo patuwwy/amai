@@ -14,6 +14,12 @@ programming directly on AmigaOS (C, 680x0 ASM, ARexx, Amiga E, AmigaDOS),
 reading/writing files, patching code, and executing AmigaDOS commands with
 safety approval modes.
 
+Project Homepage & Source Code:
+-------------------------------
+GitHub Repository: https://github.com/patuwwy/amai
+Issue Tracker:     https://github.com/patuwwy/amai/issues
+Releases & Source: https://github.com/patuwwy/amai/releases
+
 It connects through a lightweight bridge server on your modern PC/Mac/Linux
 machine, allowing you to use local models (Ollama, LM Studio) or cloud AI
 providers (Google Gemini, OpenAI, OpenRouter) with full tool-calling support.
@@ -33,20 +39,29 @@ Quick Start Guide:
 
 1. On your PC / Mac / Linux (Host Bridge):
 ------------------------------------------
-AMAI communicates with AI models via a lightweight Node.js bridge server:
-a) Local models (Ollama):
-   - Install Ollama (https://ollama.com) and pull your model:
-     ollama run qwen2.5:latest (or qwen3.8:latest)
-b) Cloud models (Google Gemini / OpenAI / OpenRouter):
-   - Copy pc/.env.example to pc/.env and set your API keys:
-     GEMINI_API_KEY=your_gemini_api_key
-     OPENAI_API_KEY=your_openai_api_key
-     OPENROUTER_API_KEY=your_openrouter_api_key
-   - You can also configure DEFAULT_MODEL in pc/.env.
-c) Run the bridge server in the amai project directory on your PC:
-   node pc/server.js
-   (or double-click start_bridge.bat on Windows, or ./start_bridge.sh on Linux/macOS)
-   The bridge will automatically log active providers and listen on port 11435.
+AMAI requires a bridge server running on a PC, Mac, or Linux machine on the
+same local network (or localhost for WinUAE).
+
+a) Download the Host Bridge:
+   Clone or download the project repository from GitHub:
+   git clone https://github.com/patuwwy/amai.git
+   (or download ZIP from https://github.com/patuwwy/amai/releases)
+
+b) Requirements:
+   Node.js (v18+) is required on the host machine (https://nodejs.org).
+
+c) Setup AI Model:
+   - For Local AI: Install Ollama (https://ollama.com) and pull your model:
+     ollama run qwen3.8:latest
+   - For Cloud AI: Copy pc/.env.example to pc/.env and set your API keys:
+     GEMINI_API_KEY=your_key_from_aistudio.google.com
+     OPENAI_API_KEY=your_openai_key
+     OPENROUTER_API_KEY=your_openrouter_key
+
+d) Run the bridge server:
+   - On Windows: double-click start_bridge.bat (or run "node pc/server.js")
+   - On Linux/macOS: run "./start_bridge.sh" (or "node pc/server.js")
+   The bridge will log active providers and listen on port 11435.
 
 2. On your Amiga:
 -----------------
@@ -61,9 +76,19 @@ d) Run AMAI from the AmigaDOS Shell:
    Or specify host and model on the command line:
    amai -h 192.168.1.50 -m gemini-flash-latest
 
-During the interactive session, you can use built-in slash commands such
-as /help, /status, /host, /model, /mode, /encoding, /save, and /clear.
-Use "/model" to list all available local and cloud models.
+Interactive Commands:
+---------------------
+During the session, built-in slash commands are available:
+- /help               : Show commands and safety mode help
+- /status             : Check connection to PC bridge and active models
+- /model [name|prov]  : Show/switch model, or filter by provider
+- /mode [smart|manual|auto] : Set safety approval mode
+- /auto [on|off]      : Quick toggle unrestricted AUTO execution mode
+- /encoding [mode]    : Character charset (ascii, amigapl, iso-8859-2, raw)
+- /read <file>        : Inject Amiga file contents into conversation
+- /run <cmd>          : Run AmigaDOS command directly
+- /save               : Save current settings to amai.config.json
+- /clear              : Reset conversation history
 
 About NodeAmiga Runtime:
 ------------------------
